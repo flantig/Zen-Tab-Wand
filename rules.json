@@ -1,0 +1,11 @@
+{
+  "_comment": "Pass 1 domain rules. First match wins, so list more specific rules before more general ones (e.g. calendar.google.com before google.com). Pattern semantics: 'host.com' matches the bare host AND any subdomain. '*.host.com' matches subdomains only. Edit and click the button — no restart needed.",
+  "rules": [
+    { "name": "Calendar", "domains": ["calendar.google.com", "connect.garmin.com"] },
+    { "name": "AI Tools", "domains": ["chat.openai.com", "gemini.google.com", "perplexity.ai"] },
+    { "name": "Dev",      "domains": ["dashboard.render.com", "github.com", "stackoverflow.com"] },
+    { "name": "Shopping", "domains": ["amazon.com", "staples.com", "ebay.com"] },
+    { "name": "Social",   "domains": ["reddit.com", "x.com", "bsky.app"] },
+    { "name": "Search",   "domains": ["google.com", "duckduckgo.com"] }
+  ]
+}

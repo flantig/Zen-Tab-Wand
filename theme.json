@@ -1,0 +1,34 @@
+{
+  "id": "zen-tab-wand",
+  "name": "Zen Tab Wand",
+  "description": "One-click tab tidy. Sorts open tabs into groups using your domain rules first, then optionally an AI engine (built-in or Ollama) for everything the rules miss.",
+  "homepage": "https://github.com/flantig/Zen-Tab-Wand",
+  "supportsUnload": false,
+  "style": {
+    "chrome": "userChrome.css"
+  },
+  "scripts": {
+    "auto-organize.uc.mjs": {
+      "include": [
+        "chrome://browser/content/browser.xhtml",
+        "about:preferences*",
+        "chrome://browser/content/preferences/preferences.xhtml*"
+      ]
+    }
+  },
+  "readme": "README.md",
+  "image": "image.png",
+  "author": "franklinl",
+  "version": "1.0.0",
+  "preferences": "preferences.json",
+  "tags": [
+    "Tabs",
+    "Tab Groups",
+    "Productivity",
+    "AI",
+    "Ollama"
+  ],
+  "createdAt": "2026-05-15",
+  "updatedAt": "2026-05-18",
+  "fork": ["zen"]
+}

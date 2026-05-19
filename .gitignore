@@ -1,0 +1,9 @@
+# User-specific rule snapshots created during debugging — never ship
+recovery-rules.json
+*.bak
+*.bak.*
+
+# OS / editor cruft
+.DS_Store
+*.swp
+*~

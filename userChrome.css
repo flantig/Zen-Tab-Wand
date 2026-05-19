@@ -1,0 +1,608 @@
+/* Zen Tab Wand — pill-style rules table in the Sine settings dialog.
+   Borders/backgrounds are derived from currentColor via color-mix so the
+   widget adapts to whatever theme Zen is running. */
+
+/* --- Look & Feel: minimal mode for rule-matched tab-groups.
+   Overrides Zen's per-group color custom properties with values derived from
+   the toolbar / urlbar so groups blend into the chrome instead of standing out. */
+tab-group.zao-minimal {
+  --tab-group-color: var(--toolbar-field-color, currentColor) !important;
+  --tab-group-color-invert: var(--toolbar-field-color, currentColor) !important;
+  --tab-group-color-pale: var(--toolbar-field-background-color, transparent) !important;
+  --tab-group-line-color: color-mix(in srgb, currentColor 18%, transparent) !important;
+}
+
+/* --- Toolbar button: wiggle the wand on click --- */
+@keyframes zao-wand-wiggle {
+  0%   { transform: rotate(0deg); }
+  15%  { transform: rotate(-18deg); }
+  30%  { transform: rotate(20deg); }
+  45%  { transform: rotate(-14deg); }
+  60%  { transform: rotate(10deg); }
+  80%  { transform: rotate(-4deg); }
+  100% { transform: rotate(0deg); }
+}
+
+#tab-wand-button.zao-wiggling svg {
+  animation: zao-wand-wiggle 550ms ease-in-out;
+  transform-origin: 22% 78%;
+}
+
+/* AI Pass 2 in progress — applied by click-handler.mjs setButtonThinking().
+   A gentle pulse on the wand SVG (rather than an icon swap) so it's visible
+   in peripheral vision without being distracting. Kicks in after the wiggle
+   class is removed; the two never animate the SVG simultaneously. */
+@keyframes zao-thinking-pulse {
+  0%   { opacity: 1;    transform: scale(1); }
+  50%  { opacity: 0.55; transform: scale(0.92); }
+  100% { opacity: 1;    transform: scale(1); }
+}
+#tab-wand-button.zao-thinking svg {
+  animation: zao-thinking-pulse 1.2s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* Inline description paragraph injected under a Sine "separator" header.
+   Sine renders separator labels as bold/larger section titles, so verbose
+   paragraph text in the label itself breaks the styling. We inject this as a
+   sibling element after the separator instead. */
+.zao-pref-description {
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.7;
+  margin: 2px 5px 10px 5px;
+}
+
+/* Hide a Sine pref row. !important so we override XUL's implicit `visibility`
+   rules when applied to a vbox/hbox container. */
+.zao-pref-hidden {
+  display: none !important;
+}
+
+.zao-rules-editor {
+  display: block !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  box-sizing: border-box !important;
+  /* Override Sine's `.sineItemPreferenceDialogContent > * { padding: 0 5px }`
+     so our card extends to the same edges as the separator hrs above/below. */
+  padding: 0 !important;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+.zao-header,
+.zao-row,
+.zao-add-row {
+  display: grid;
+  grid-template-columns: 28px 180px 1fr 28px;
+  gap: 10px;
+  padding: 8px 12px;
+  align-items: center;
+}
+
+/* Backup & Restore subsection — standalone block between the rules editor card
+   and the Look & Feel separator. The header uses the same XUL vbox + <hr> +
+   <label class="separator-label"> markup Sine uses for its native sections, so
+   it inherits chrome styling automatically — no overrides needed. */
+.zao-backup-section {
+  margin: 10px 0 !important;
+}
+
+.zao-backup-row {
+  display: flex !important;
+  gap: 8px !important;
+  padding: 0 2px !important;
+}
+
+.zao-backup-btn {
+  appearance: none !important;
+  background: color-mix(in srgb, currentColor 10%, transparent) !important;
+  color: inherit !important;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent) !important;
+  border-radius: 6px !important;
+  padding: 5px 12px !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
+}
+
+.zao-backup-btn:hover {
+  background: color-mix(in srgb, currentColor 16%, transparent) !important;
+}
+
+.zao-header {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.75;
+}
+
+.zao-row + .zao-row,
+.zao-header + .zao-row {
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.zao-row:hover {
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.zao-group-name {
+  appearance: none;
+  width: 100%;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 999px;
+  color: inherit;
+  padding: 4px 14px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.zao-group-name:focus {
+  outline: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  outline-offset: 1px;
+}
+
+.zao-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.zao-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 2px 2px 9px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.zao-pill > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zao-pill-remove {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
+  opacity: 0.55;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.zao-pill-remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.zao-pill-add {
+  appearance: none;
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, currentColor 28%, transparent);
+  color: inherit;
+  padding: 2px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.7;
+  flex: 0 0 auto;
+}
+.zao-pill-add:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.zao-pill-input {
+  appearance: none;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  color: inherit;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  min-width: 140px;
+  outline: none;
+}
+
+.zao-remove-row {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.4;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.zao-remove-row:hover {
+  opacity: 1;
+  background: color-mix(in srgb, #c33 14%, transparent);
+}
+
+.zao-add-row {
+  grid-template-columns: 1fr;
+  background: color-mix(in srgb, currentColor 3%, transparent);
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.zao-add-row-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, currentColor 25%, transparent);
+  color: inherit;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.75;
+  width: 100%;
+}
+.zao-add-row-btn:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+}
+
+.zao-empty {
+  padding: 12px;
+  opacity: 0.65;
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* --- Color picker --- */
+.zao-color-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.zao-swatch {
+  appearance: none !important;
+  display: inline-block !important;
+  box-sizing: border-box !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  border-radius: 50% !important;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  cursor: pointer;
+  padding: 0 !important;
+  margin: 0;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.zao-swatch-empty {
+  background:
+    linear-gradient(45deg, transparent 46%, color-mix(in srgb, currentColor 35%, transparent) 46% 54%, transparent 54%),
+    color-mix(in srgb, currentColor 6%, transparent) !important;
+}
+
+.zao-color-popover {
+  position: fixed;
+  z-index: 999999;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  background: Canvas;
+  color: CanvasText;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.zao-presets {
+  display: flex;
+  gap: 5px;
+}
+
+.zao-preset {
+  appearance: none !important;
+  display: inline-block !important;
+  box-sizing: border-box !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  border-radius: 50% !important;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0 !important;
+  margin: 0;
+  transition: transform 0.08s ease;
+}
+.zao-preset:hover {
+  transform: scale(1.12);
+}
+.zao-preset-active {
+  border-color: color-mix(in srgb, currentColor 65%, transparent);
+}
+
+.zao-color-hex {
+  appearance: none;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 4px;
+  color: inherit;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  padding: 3px 6px;
+  width: 84px;
+  outline: none;
+}
+.zao-color-hex:focus {
+  border-color: color-mix(in srgb, currentColor 50%, transparent);
+}
+
+/* ─── Identify-only preview modal (Phase 4d) ──────────────────────────────── */
+/* A native <dialog> we inject into chrome://browser/content/browser.xhtml when
+   the user picks "Identify only" as the new-group behavior. Renders the AI
+   plan with Apply / Cancel; the click-handler only commits on Apply.        */
+
+dialog.zao-preview-dialog {
+  /* Reset native <dialog> defaults so we control sizing + colors cleanly */
+  padding: 0;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 12px;
+  max-width: 640px;
+  width: min(640px, 92vw);
+  max-height: 80vh;
+  background: var(--toolbar-bgcolor, Canvas);
+  color: var(--toolbar-color, CanvasText);
+  box-shadow: 0 14px 48px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  font-size: 13px;
+  flex-direction: column;
+}
+dialog.zao-preview-dialog[open] {
+  display: flex;
+}
+dialog.zao-preview-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.zao-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.zao-preview-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.zao-preview-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  opacity: 0.7;
+}
+.zao-preview-close:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  opacity: 1;
+}
+
+.zao-preview-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 18px;
+}
+
+.zao-preview-summary {
+  margin: 0 0 14px 0;
+  opacity: 0.8;
+}
+
+.zao-preview-section {
+  margin-bottom: 18px;
+}
+.zao-preview-section:last-child {
+  margin-bottom: 0;
+}
+.zao-preview-section-title {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.65;
+}
+.zao-preview-skipped .zao-preview-section-title {
+  opacity: 0.55;
+}
+
+.zao-preview-group {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+.zao-preview-group:hover {
+  border-color: color-mix(in srgb, currentColor 24%, transparent);
+}
+.zao-preview-group.zao-kept {
+  background: color-mix(in srgb, AccentColor 14%, transparent);
+  border-color: AccentColor;
+}
+.zao-preview-group:not(.zao-kept) {
+  opacity: 0.55;
+}
+.zao-preview-group:not(.zao-kept) .zao-preview-tab {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+.zao-preview-group:focus-visible {
+  outline: 2px solid AccentColor;
+  outline-offset: 2px;
+}
+
+.zao-preview-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.zao-preview-group-name {
+  font-weight: 600;
+}
+.zao-preview-group-state {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+.zao-preview-group.zao-kept .zao-preview-group-state {
+  color: AccentColor;
+  opacity: 1;
+}
+
+.zao-preview-tab-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.zao-preview-tab {
+  padding: 2px 0;
+  font-size: 12.5px;
+}
+.zao-preview-tab-host {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: color-mix(in srgb, currentColor 85%, transparent);
+}
+.zao-preview-tab-title {
+  opacity: 0.75;
+}
+.zao-preview-tab-arrow {
+  opacity: 0.5;
+}
+.zao-preview-tab-target {
+  font-weight: 500;
+}
+
+.zao-preview-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  background: color-mix(in srgb, currentColor 3%, transparent);
+}
+.zao-preview-footer-left,
+.zao-preview-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zao-preview-btn {
+  appearance: none;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  font: inherit;
+}
+.zao-preview-btn-cancel {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  color: inherit;
+}
+.zao-preview-btn-cancel:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.zao-preview-btn-apply {
+  background: AccentColor;
+  color: AccentColorText;
+  border: 1px solid transparent;
+}
+.zao-preview-btn-apply:hover {
+  filter: brightness(1.08);
+}
+.zao-preview-btn-reassign {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  color: inherit;
+  /* Lock min-width so swapping text → spinner doesn't shift sibling buttons */
+  min-width: 150px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+.zao-preview-btn-reassign:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.zao-preview-btn-reassign:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* Footer wraps if the modal is narrower than the four buttons together. */
+.zao-preview-footer {
+  flex-wrap: wrap;
+}
+
+/* Spinner shown inside the Re-assign button while the model is working. */
+.zao-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: zao-spin 0.7s linear infinite;
+}
+@keyframes zao-spin {
+  to { transform: rotate(360deg); }
+}
