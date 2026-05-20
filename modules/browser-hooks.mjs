@@ -12,7 +12,18 @@
 // `_zaoXxxHook` expando. This prevents double-install if the entry script is
 // re-evaluated (e.g. across module reloads during development).
 
-import { CONFIG, LOG, BUILD_VERSION, TAB_EJECTION_GRACE_MS, isZenColorName, isUnsetLabel } from "./config.mjs";
+import { CONFIG, LOG, BUILD_VERSION, TAB_EJECTION_GRACE_MS as IMPORTED_GRACE, isZenColorName, isUnsetLabel } from "./config.mjs";
+
+// Hardcoded fallback for the grace window. The import sometimes resolves to
+// undefined at runtime (suspect: circular import between browser-hooks.mjs
+// and groups.mjs creating a temporal-dead-zone for sibling re-exports). When
+// undefined leaks into `< GRACE_MS`, every comparison is false
+// and the ejection guard fails silently. Take the larger of imported vs the
+// local fallback so we always have a sane number.
+const GRACE_MS = Number(IMPORTED_GRACE) > 0 ? Number(IMPORTED_GRACE) : 60000;
+
+// Self-diagnostic on module load — proves whether the import is healthy.
+console.log(`${LOG} browser-hooks.mjs loaded — imported GRACE_MS=${IMPORTED_GRACE} (typeof ${typeof IMPORTED_GRACE}); effective GRACE_MS=${GRACE_MS}`);
 import { getTabUrl, getHostname } from "./tabs.mjs";
 import { readRulesPref, writeRulesPref, isMinimalStyle } from "./rules.mjs";
 import { applyGroupColor, syncAllGroupColors } from "./groups.mjs";
@@ -73,13 +84,13 @@ export const markTabAsEjected = (tab) => {
   // Auto-clean after the grace window.
   setTimeout(() => {
     for (const k of keys) if (_ejectionRegistry.get(k) === stamp) _ejectionRegistry.delete(k);
-  }, TAB_EJECTION_GRACE_MS + 500);
+  }, GRACE_MS + 500);
 };
 const recentlyEjectedAge = (tab) => {
   const keys = _identityFor(tab);
   for (const k of keys) {
     const t = _ejectionRegistry.get(k);
-    if (t && (Date.now() - t) < TAB_EJECTION_GRACE_MS) return { age: Date.now() - t, matchedKey: typeof k === "string" ? k : "tab-element" };
+    if (t && (Date.now() - t) < GRACE_MS) return { age: Date.now() - t, matchedKey: typeof k === "string" ? k : "tab-element" };
   }
   return null;
 };
@@ -197,7 +208,7 @@ export const setupTabGroupedHook = () => {
     // suppression window). Try expando first, fall back to the central
     // registry (which keys by linkedPanel + hostname so it survives the
     // tab element being swapped out during Zen's re-attach).
-    if (tabExpando && (Date.now() - tabExpando) < TAB_EJECTION_GRACE_MS) {
+    if (tabExpando && (Date.now() - tabExpando) < GRACE_MS) {
       const age = Date.now() - tabExpando;
       console.log(`${LOG} TabGrouped: IGNORED via expando — "${hostname}" was ejected ${age}ms ago; rule will NOT grow`);
       delete tab._zaoEjectedAt;
