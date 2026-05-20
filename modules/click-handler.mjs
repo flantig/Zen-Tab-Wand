@@ -453,7 +453,19 @@ export const handleOrganizeClick = async () => {
   }
 
   } finally {
-    popTabGroupedHookSuppression();
-    console.log(`${LOG} click END — suppression popped`);
+    // Defer the pop. Zen's session bookkeeping fires a stale TabGrouped event
+    // asynchronously after our click finishes, trying to re-attach tabs we
+    // explicitly ungrouped via gBrowser.ungroupTab. If we pop suppression
+    // synchronously, that re-attach event slips through and grows rules.
+    // Holding suppression open for a couple of seconds covers Zen's settling
+    // window. The trade-off: a user who drag-and-drops a tab into a group
+    // within 2 seconds of clicking the wand won't get that auto-added to
+    // rules — acceptable, given how unusual that interleaving is.
+    const SUPPRESSION_TAIL_MS = 2000;
+    setTimeout(() => {
+      popTabGroupedHookSuppression();
+      console.log(`${LOG} click END — suppression popped (delayed ${SUPPRESSION_TAIL_MS}ms)`);
+    }, SUPPRESSION_TAIL_MS);
+    console.log(`${LOG} click END — suppression hold for ${SUPPRESSION_TAIL_MS}ms before pop`);
   }
 };

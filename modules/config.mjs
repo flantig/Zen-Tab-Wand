@@ -16,7 +16,7 @@ export const LOG = "[ZenTabWand]";
 // behavior or diagnostics change so the Browser Console reveals which build is
 // actually running (vs. a stale module cache). Bump on every push that touches
 // runtime code.
-export const BUILD_VERSION = "1.0.0+ejection-registry.4";
+export const BUILD_VERSION = "1.0.0+delayed-pop.5";
 
 // Time window (ms) after we eject a tab from a group during which any
 // TabGrouped event re-targeting that same tab should be IGNORED by the
