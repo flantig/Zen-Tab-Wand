@@ -4,6 +4,7 @@
 
 import { CONFIG, LOG, isZenColorName, isValidHex } from "./config.mjs";
 import { isMinimalStyle } from "./rules.mjs";
+import { setTabGroupedHookSuppressed } from "./browser-hooks.mjs";
 
 // Find an existing tab-group with the given label in the given workspace.
 // Tries direct attribute match first (which doesn't always work because Zen doesn't
@@ -348,40 +349,47 @@ export const consolidateDuplicateGroups = (workspaceId) => {
   let mergedLabels = 0;
   let totalTabsMoved = 0;
 
-  for (const [label, groupEls] of byLabel) {
-    if (groupEls.length < 2) continue;
+  // Suppress the TabGrouped auto-add hook — these are programmatic dedupe
+  // moves, not user-initiated grouping, and we don't want them growing rules.
+  setTabGroupedHookSuppressed(true);
+  try {
+    for (const [label, groupEls] of byLabel) {
+      if (groupEls.length < 2) continue;
 
-    const canonical = groupEls[0];
-    expandIfCollapsed(canonical);
-    let movedThisLabel = 0;
+      const canonical = groupEls[0];
+      expandIfCollapsed(canonical);
+      let movedThisLabel = 0;
 
-    for (let i = 1; i < groupEls.length; i++) {
-      const dup = groupEls[i];
-      if (!dup.isConnected) continue;
+      for (let i = 1; i < groupEls.length; i++) {
+        const dup = groupEls[i];
+        if (!dup.isConnected) continue;
 
-      const dupTabs = Array.from(
-        dup.querySelectorAll(`tab[zen-workspace-id="${workspaceId}"]`)
-      );
-      for (const tab of dupTabs) {
-        if (!tab.isConnected) continue;
-        try {
-          gBrowser.moveTabToExistingGroup(tab, canonical);
-          movedThisLabel++;
-        } catch (e) {
-          console.error(`${LOG} error merging tab into "${label}":`, e);
+        const dupTabs = Array.from(
+          dup.querySelectorAll(`tab[zen-workspace-id="${workspaceId}"]`)
+        );
+        for (const tab of dupTabs) {
+          if (!tab.isConnected) continue;
+          try {
+            gBrowser.moveTabToExistingGroup(tab, canonical);
+            movedThisLabel++;
+          } catch (e) {
+            console.error(`${LOG} error merging tab into "${label}":`, e);
+          }
+        }
+
+        if (dup.isConnected && !dup.querySelector("tab")) {
+          try { dup.remove(); } catch (e) {
+            console.error(`${LOG} error removing empty duplicate "${label}":`, e);
+          }
         }
       }
 
-      if (dup.isConnected && !dup.querySelector("tab")) {
-        try { dup.remove(); } catch (e) {
-          console.error(`${LOG} error removing empty duplicate "${label}":`, e);
-        }
-      }
+      mergedLabels++;
+      totalTabsMoved += movedThisLabel;
+      console.log(`${LOG} consolidated ${groupEls.length} "${label}" groups → 1 (moved ${movedThisLabel} tab(s))`);
     }
-
-    mergedLabels++;
-    totalTabsMoved += movedThisLabel;
-    console.log(`${LOG} consolidated ${groupEls.length} "${label}" groups → 1 (moved ${movedThisLabel} tab(s))`);
+  } finally {
+    setTabGroupedHookSuppressed(false);
   }
 
   return { mergedLabels, tabsMoved: totalTabsMoved };

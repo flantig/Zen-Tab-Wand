@@ -3,6 +3,7 @@
 
 import { LOG } from "./config.mjs";
 import { findExistingGroup, expandIfCollapsed, applyGroupColor, findSafeInsertAnchor } from "./groups.mjs";
+import { setTabGroupedHookSuppressed } from "./browser-hooks.mjs";
 
 // Match a hostname against a single rule-domain pattern.
 //   "host.com"    matches the bare host AND any subdomain
@@ -71,6 +72,16 @@ export const applyPass1 = (byGroup, workspaceId, rules) => {
 
   const colorByName = new Map(rules.filter((r) => r.color).map((r) => [r.name, r.color]));
 
+  // Suppress the TabGrouped hook for the duration of these programmatic moves.
+  // Without this, every `moveTabToExistingGroup` / `addTabGroup` call fires
+  // TabGrouped, which the hook treats as "user manually grouped a tab" and
+  // appends the hostname to the matching rule — bloating the rule with
+  // redundant subdomain entries on every wand click. Same pattern ai.mjs uses
+  // around applyPass2. Wrapped in try/finally so an error mid-loop can't
+  // leave the hook permanently disabled.
+  setTabGroupedHookSuppressed(true);
+  try {
+
   for (const [groupName, items] of byGroup) {
     // Resolve each item's tab info to its live DOM node (`_tab`) and re-check the
     // current group from the DOM. We re-check (rather than trusting the `currentGroup`
@@ -125,6 +136,10 @@ export const applyPass1 = (byGroup, workspaceId, rules) => {
         errors.push({ group: groupName, error: e.message });
       }
     }
+  }
+
+  } finally {
+    setTabGroupedHookSuppressed(false);
   }
 
   return { movedToExisting, createdGroups, movedToNew, errors };
