@@ -407,15 +407,18 @@ tab-group.zao-minimal {
    plan with Apply / Cancel; the click-handler only commits on Apply.        */
 
 dialog.zao-preview-dialog {
-  /* Reset native <dialog> defaults so we control sizing + colors cleanly */
+  /* Reset native <dialog> defaults so we control sizing + colors cleanly.
+     Use `Canvas` (always-opaque CSS system color) — NOT var(--toolbar-bgcolor),
+     which on Windows resolves to a translucent value so the OS Mica/acrylic
+     blur shows through. Modal content needs a solid backdrop. */
   padding: 0;
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   border-radius: 12px;
   max-width: 640px;
   width: min(640px, 92vw);
   max-height: 80vh;
-  background: var(--toolbar-bgcolor, Canvas);
-  color: var(--toolbar-color, CanvasText);
+  background: Canvas;
+  color: CanvasText;
   box-shadow: 0 14px 48px rgba(0, 0, 0, 0.35);
   overflow: hidden;
   font-size: 13px;
