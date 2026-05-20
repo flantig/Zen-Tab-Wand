@@ -14,7 +14,8 @@ import {
   addButtonToAllSeparators,
 } from "./modules/browser-ui.mjs";
 import {
-  setupTabGroupedHook,
+  setupTabContextMenu,
+  teardownTabContextMenu,
   setupTabGroupCreateHook,
   setupMinimalStylePrefObserver,
   teardownMinimalStylePrefObserver,
@@ -41,7 +42,7 @@ const tryInitializeBrowser = () => {
       setupCommand();
       addButtonToAllSeparators();
       setupWorkspaceHooks();
-      setupTabGroupedHook();
+      setupTabContextMenu();
       setupTabGroupCreateHook();
       setupMinimalStylePrefObserver();
 
@@ -101,6 +102,7 @@ const cleanup = () => {
     }
     domCache.invalidate();
     teardownSettingsObserver();
+    teardownTabContextMenu();
     teardownMinimalStylePrefObserver();
   } catch (e) {
     console.error(`${LOG} cleanup error:`, e);

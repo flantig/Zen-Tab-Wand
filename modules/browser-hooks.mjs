@@ -1,99 +1,38 @@
-// Zen Tab Wand — browser-context event hooks for Zen's native tab-group actions.
+// Zen Tab Wand — browser-context event hooks.
 //
-// Two DOM hooks installed on `gBrowser.tabContainer`:
-//   TabGrouped       — auto-add the tab's hostname to a matching rule, or create a
-//                       new rule (handling the "New Group" naming flow).
+// Rule growth is now strictly user-initiated:
+//   • Settings UI — direct editing of each rule's domain list.
+//   • Tab right-click → "Add <hostname> to <group> rule" — explicit menu item
+//     installed by setupTabContextMenu (this file).
+//
+// We REMOVED the previous global TabGrouped listener because Zen dispatches
+// TabGrouped events asynchronously (and for non-user reasons like session
+// restore reconciling state after we've programmatically ejected a tab).
+// There's no reliable way to distinguish user-initiated grouping from Zen's
+// internal re-attaches, so the listener was an endless source of phantom
+// rule growth. The context menu item replaces it with explicit user intent.
+//
+// Remaining DOM hook + observer in this file:
 //   TabGroupCreate   — re-apply rule colors when Zen restores groups on startup.
-// Plus one pref observer:
-//   minimal-style    — re-run syncAllGroupColors immediately when the user toggles
-//                       the pref, so the change shows up without needing a tidy-click.
+//   minimal-style    — re-run syncAllGroupColors when the user toggles the pref.
 //
-// On the DOM hooks we stash the installed handler back onto `tabContainer` as a
+// On DOM hooks we stash the installed handler back onto its host element as a
 // `_zaoXxxHook` expando. This prevents double-install if the entry script is
 // re-evaluated (e.g. across module reloads during development).
 
-import { CONFIG, LOG, BUILD_VERSION, TAB_EJECTION_GRACE_MS as IMPORTED_GRACE, isZenColorName, isUnsetLabel } from "./config.mjs";
-
-// Hardcoded fallback for the grace window. The import sometimes resolves to
-// undefined at runtime (suspect: circular import between browser-hooks.mjs
-// and groups.mjs creating a temporal-dead-zone for sibling re-exports). When
-// undefined leaks into `< GRACE_MS`, every comparison is false
-// and the ejection guard fails silently. Take the larger of imported vs the
-// local fallback so we always have a sane number.
-const GRACE_MS = Number(IMPORTED_GRACE) > 0 ? Number(IMPORTED_GRACE) : 60000;
-
-// Self-diagnostic on module load — proves whether the import is healthy.
-console.log(`${LOG} browser-hooks.mjs loaded — imported GRACE_MS=${IMPORTED_GRACE} (typeof ${typeof IMPORTED_GRACE}); effective GRACE_MS=${GRACE_MS}`);
+import { CONFIG, LOG, BUILD_VERSION, isZenColorName, isUnsetLabel } from "./config.mjs";
 import { getTabUrl, getHostname } from "./tabs.mjs";
 import { readRulesPref, writeRulesPref, isMinimalStyle } from "./rules.mjs";
 import { applyGroupColor, syncAllGroupColors } from "./groups.mjs";
 
-// Counter-based suppression. Any module about to do programmatic tab grouping /
-// moving / ungrouping should pushTabGroupedHookSuppression() before the work
-// and popTabGroupedHookSuppression() in a finally. Counter (vs boolean) lets
-// suppressions nest — e.g. handleOrganizeClick suppresses the whole click AND
-// applyPass1 / applyPass2 also suppress their inner work; the outer suppression
-// stays effective when the inner one pops.
-let _suppressionCount = 0;
-export const pushTabGroupedHookSuppression = () => {
-  _suppressionCount++;
-};
-export const popTabGroupedHookSuppression = () => {
-  _suppressionCount = Math.max(0, _suppressionCount - 1);
-};
-// Legacy boolean-style API kept temporarily for any callers that haven't
-// migrated. `true` ≈ push, `false` ≈ pop. New code should use push/pop.
-export const setTabGroupedHookSuppressed = (val) => {
-  if (val) pushTabGroupedHookSuppression();
-  else popTabGroupedHookSuppression();
-};
-const isHookSuppressed = () => _suppressionCount > 0;
-
-// Registry of recently-ejected tabs. We track them three ways because the
-// `tab` reference in the asynchronous TabGrouped event has occasionally
-// turned out to NOT be the same JavaScript object we set the expando on
-// (Zen may replace the element during re-attach). Looking up via multiple
-// stable identifiers makes the guard robust to whichever quirk applies.
-//
-//   Map key options (any one matches):
-//     - the tab element itself
-//     - tab.linkedPanel (Firefox-stable string id for a tab's panel)
-//     - hostname (last-resort coarse match)
-//
-// Entries auto-expire via setTimeout so a real user-initiated re-group of
-// the same tab later isn't blocked.
-const _ejectionRegistry = new Map();
-const _identityFor = (tab) => {
-  if (!tab) return [];
-  const keys = [tab];
-  if (tab.linkedPanel) keys.push(`panel:${tab.linkedPanel}`);
-  try {
-    const url = tab.linkedBrowser?.currentURI?.spec || tab.getAttribute?.("linkedURL");
-    if (url) {
-      const u = new URL(url);
-      keys.push(`host:${u.hostname}`);
-    }
-  } catch {}
-  return keys;
-};
-export const markTabAsEjected = (tab) => {
-  const stamp = Date.now();
-  const keys = _identityFor(tab);
-  for (const k of keys) _ejectionRegistry.set(k, stamp);
-  console.log(`${LOG} markTabAsEjected: stamped ${keys.length} identity key(s) [${keys.slice(1).join(", ")}] at ${stamp}`);
-  // Auto-clean after the grace window.
-  setTimeout(() => {
-    for (const k of keys) if (_ejectionRegistry.get(k) === stamp) _ejectionRegistry.delete(k);
-  }, GRACE_MS + 500);
-};
-const recentlyEjectedAge = (tab) => {
-  const keys = _identityFor(tab);
-  for (const k of keys) {
-    const t = _ejectionRegistry.get(k);
-    if (t && (Date.now() - t) < GRACE_MS) return { age: Date.now() - t, matchedKey: typeof k === "string" ? k : "tab-element" };
-  }
-  return null;
-};
+// No-op shims for back-compat. The TabGrouped listener is gone, so there's
+// nothing to suppress. These exports stay so existing callsites in pass1.mjs /
+// ai.mjs / groups.mjs / click-handler.mjs don't need touching; they can be
+// cleaned up in a future sweep.
+export const pushTabGroupedHookSuppression = () => {};
+export const popTabGroupedHookSuppression = () => {};
+export const setTabGroupedHookSuppressed = (_val) => {};
+export const markTabAsEjected = (_tab) => {};
 
 // ─── Helpers (module level so they're reusable + easy to find) ───────────────
 
@@ -108,12 +47,12 @@ const applyToRule = (tab, groupName, group) => {
 
   if (rule) {
     if (rule.domains.includes(hostname)) {
-      console.log(`${LOG} TabGrouped: "${hostname}" already in "${groupName}"`);
+      console.log(`${LOG} context-menu: "${hostname}" already in "${groupName}"`);
       return;
     }
     rule.domains.push(hostname);
     writeRulesPref(rules);
-    console.log(`${LOG} TabGrouped: added "${hostname}" to existing rule "${groupName}"`);
+    console.log(`${LOG} context-menu: added "${hostname}" to existing rule "${groupName}"`);
   } else {
     const newRule = { name: groupName, domains: [hostname] };
     const groupColor = group?.color;
@@ -121,129 +60,95 @@ const applyToRule = (tab, groupName, group) => {
     rules.push(newRule);
     writeRulesPref(rules);
     console.log(
-      `${LOG} TabGrouped: created new rule "${groupName}" with "${hostname}"` +
+      `${LOG} context-menu: created new rule "${groupName}" with "${hostname}"` +
         (newRule.color ? ` (color: ${newRule.color})` : "")
     );
   }
 };
 
-// Zen's "Create tab group" modal sets `group.label` on every keystroke AND fires
-// TabGroupUpdate on every color swatch click. We can't commit on those events —
-// they fire while the user is still composing. Wait for the modal to actually close.
-//
-// We listen for `popuphidden` on the document (any popup close). This unifies all the
-// modal-dismiss paths: Done button, Escape, click-outside, etc. — vs `TabGroupCreateDone`
-// which only fires from the Done path. Group state (label set + still connected) gates
-// the commit, so unrelated popup closes are harmless.
-//
-// The setTimeout(0) defer is critical for the color: the swatch radio's `change` event
-// updates `group.color` synchronously, but the user can pick a color and click outside
-// in the same gesture. The microtask defer ensures any pending change handler has
-// committed `group.color` before we read it.
-//
-// If the modal is never resolved (user closes the page mid-edit) we abandon after
-// NEW_GROUP_ABANDON_MS so the document listener doesn't leak forever.
-const NEW_GROUP_ABANDON_MS = 5 * 60 * 1000;
-
-const waitForGroupName = (tab, group) => {
-  let applied = false;
-
-  const cleanup = () => {
-    document.removeEventListener("popuphidden", onPopupHidden);
-    clearTimeout(abandonTimer);
-  };
-
-  const tryCommit = () => {
-    if (applied) return;
-    if (!group.isConnected) { cleanup(); return; }
-    const lbl = group.getAttribute("label");
-    // If label is still the placeholder, the popup that closed wasn't the one we're
-    // waiting on (or the user dismissed the modal without naming). Stay subscribed —
-    // either the abandon timer fires, or the group is removed (cancel path).
-    if (isUnsetLabel(lbl)) return;
-    applied = true;
-    cleanup();
-    console.log(`${LOG} TabGrouped: committing on modal close, label="${lbl}", color="${group?.color ?? "(none)"}"`);
-    applyToRule(tab, lbl, group);
-  };
-
-  const onPopupHidden = () => {
-    // Defer one tick so Zen's swatch-change handler has time to flush the user's
-    // color pick into group.color before applyToRule reads it.
-    setTimeout(tryCommit, 0);
-  };
-
-  const abandonTimer = setTimeout(() => {
-    if (applied) return;
-    console.log(`${LOG} TabGrouped: abandoning "New Group" wait after ${NEW_GROUP_ABANDON_MS / 1000}s`);
-    cleanup();
-  }, NEW_GROUP_ABANDON_MS);
-
-  document.addEventListener("popuphidden", onPopupHidden);
-};
-
 // ─── Setup ───────────────────────────────────────────────────────────────────
 
-export const setupTabGroupedHook = () => {
-  if (typeof gBrowser === "undefined" || !gBrowser.tabContainer) return;
-  if (gBrowser.tabContainer._zaoTabGroupedHook) return;
+// Install a tab right-click menu item that lets the user explicitly add the
+// hovered tab's hostname to its current group's rule. Replaces the previous
+// passive TabGrouped listener — which couldn't reliably distinguish user
+// actions from Zen's async session-restore re-attaches. Explicit user click
+// = explicit user intent.
+//
+// The menu item is hidden when:
+//   • The hovered tab isn't in a group
+//   • The group's label doesn't match any current rule
+//   • The hostname is already in the matched rule's domains
+//
+// Otherwise it shows `Add "<hostname>" to "<group>" rule`.
+const MENUITEM_ID = "zen-tab-wand-add-to-rule";
 
-  const handler = (event) => {
-    const group = event.target;
-    const tab = event.detail;
-    const groupLabel = group?.getAttribute?.("label") ?? "(no-label)";
-    const hostname = tab ? (() => { try { return getHostname(getTabUrl(tab)); } catch { return "(err)"; } })() : "(no-tab)";
-    if (isHookSuppressed()) {
-      console.log(`${LOG} TabGrouped: SUPPRESSED (suppressionCount=${_suppressionCount}) for "${hostname}" → "${groupLabel}"`);
-      return;
-    }
-    // Identity diagnostics — print what we see so we can correlate with the
-    // marker the eject path tried to set.
-    const tabExpando = tab?._zaoEjectedAt;
-    const tabPanel = tab?.linkedPanel ?? "(no-panel)";
-    console.log(`${LOG} TabGrouped: identity check — expando=${tabExpando ?? "(none)"}, linkedPanel=${tabPanel}, hostname=${hostname}`);
+const findContextMenu = () =>
+  document.getElementById("tabContextMenu") ||
+  document.getElementById("zenTabContextMenu") ||
+  null;
 
-    // Recently-ejected guard: Zen fires a stale TabGrouped to re-attach a
-    // tab seconds after we ejected it (asynchronously, outside our
-    // suppression window). Try expando first, fall back to the central
-    // registry (which keys by linkedPanel + hostname so it survives the
-    // tab element being swapped out during Zen's re-attach).
-    if (tabExpando && (Date.now() - tabExpando) < GRACE_MS) {
-      const age = Date.now() - tabExpando;
-      console.log(`${LOG} TabGrouped: IGNORED via expando — "${hostname}" was ejected ${age}ms ago; rule will NOT grow`);
-      delete tab._zaoEjectedAt;
-      return;
-    }
-    const ejected = recentlyEjectedAge(tab);
-    if (ejected) {
-      console.log(`${LOG} TabGrouped: IGNORED via registry (${ejected.matchedKey}) — "${hostname}" was ejected ${ejected.age}ms ago; rule will NOT grow`);
-      return;
-    }
-    console.log(`${LOG} TabGrouped: FIRED (unsuppressed, no ejection marker) for "${hostname}" → "${groupLabel}"`);
-    try {
-      // TabGrouped is dispatched on the tab-group element with the tab in
-      // event.detail (see tab.js #updateOnTabGrouped in the Zen source).
-      // event.target is the GROUP, NOT the tab — known Zen quirk.
-      if (!tab?.isConnected || !group) return;
+const computeMenuState = (tab) => {
+  if (!tab) return { show: false, reason: "no-tab" };
+  const groupEl = tab.closest?.("tab-group");
+  const groupName = groupEl?.getAttribute?.("label");
+  if (!groupName || isUnsetLabel(groupName)) return { show: false, reason: "not-in-group" };
+  let hostname = null;
+  try { hostname = getHostname(getTabUrl(tab)); } catch {}
+  if (!hostname) return { show: false, reason: "no-hostname" };
+  const rules = readRulesPref() || [];
+  const rule = rules.find((r) => r.name === groupName);
+  if (!rule) return { show: false, reason: "no-matching-rule" };
+  if (rule.domains.includes(hostname)) return { show: false, reason: "already-in-rule" };
+  return { show: true, tab, group: groupEl, groupName, hostname };
+};
 
-      const groupName = group.getAttribute?.("label");
-      if (!isUnsetLabel(groupName)) {
-        // Picked an existing group (or created one with an immediate label).
-        applyToRule(tab, groupName, group);
-        return;
-      }
+export const setupTabContextMenu = () => {
+  const menu = findContextMenu();
+  if (!menu) {
+    console.warn(`${LOG} tab context menu not found — context menu integration skipped`);
+    return;
+  }
+  if (menu._zaoContextMenuInstalled) return;
 
-      // "New Group" flow: name is pending while the modal is open.
-      console.log(`${LOG} TabGrouped: waiting for "New Group" to be named...`);
-      waitForGroupName(tab, group);
-    } catch (e) {
-      console.error(`${LOG} TabGrouped handler error:`, e);
+  const item = document.createXULElement("menuitem");
+  item.id = MENUITEM_ID;
+  item.setAttribute("hidden", "true");
+  menu.appendChild(item);
+
+  let currentState = null;
+
+  const onShowing = () => {
+    const tab = window.TabContextMenu?.contextTab || window.gBrowser?.selectedTab;
+    const state = computeMenuState(tab);
+    currentState = state;
+    if (state.show) {
+      item.hidden = false;
+      item.setAttribute("label", `Add "${state.hostname}" to "${state.groupName}" rule`);
+    } else {
+      item.hidden = true;
     }
   };
 
-  gBrowser.tabContainer.addEventListener("TabGrouped", handler);
-  gBrowser.tabContainer._zaoTabGroupedHook = handler;
-  console.log(`${LOG} TabGrouped hook installed`);
+  const onCommand = (e) => {
+    if (e.target !== item) return;
+    if (!currentState?.show) return;
+    applyToRule(currentState.tab, currentState.groupName, currentState.group);
+  };
+
+  menu.addEventListener("popupshowing", onShowing);
+  menu.addEventListener("command", onCommand);
+  menu._zaoContextMenuInstalled = { onShowing, onCommand, item };
+  console.log(`${LOG} tab context menu installed (build ${BUILD_VERSION})`);
+};
+
+export const teardownTabContextMenu = () => {
+  const menu = findContextMenu();
+  if (!menu?._zaoContextMenuInstalled) return;
+  const { onShowing, onCommand, item } = menu._zaoContextMenuInstalled;
+  try { menu.removeEventListener("popupshowing", onShowing); } catch {}
+  try { menu.removeEventListener("command", onCommand); } catch {}
+  if (item?.isConnected) try { item.remove(); } catch {}
+  menu._zaoContextMenuInstalled = null;
 };
 
 // On every tab-group creation (including session restore on startup), re-apply the
