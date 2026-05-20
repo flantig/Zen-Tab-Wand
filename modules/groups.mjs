@@ -2,7 +2,7 @@
 // color application (named via Zen API; hex via CSS variable overrides), and the
 // sort-ungrouped-to-top pass.
 
-import { CONFIG, LOG, isZenColorName, isValidHex } from "./config.mjs";
+import { CONFIG, LOG, TAB_EJECTION_GRACE_MS, isZenColorName, isValidHex } from "./config.mjs";
 import { isMinimalStyle } from "./rules.mjs";
 import { setTabGroupedHookSuppressed } from "./browser-hooks.mjs";
 
@@ -176,6 +176,10 @@ export const moveTabsToTop = (tabs, workspaceId) => {
       } else {
         tabsContainer.insertBefore(tab, tabsContainer.firstChild);
       }
+      // Mark the tab as recently-ejected so the async TabGrouped event Zen
+      // fires shortly after (re-attaching the tab to its old group) is
+      // ignored by the auto-add hook. See browser-hooks.mjs.
+      tab._zaoEjectedAt = Date.now();
       moved++;
     } catch (e) {
       console.error(`${LOG} moveTabsToTop: failed:`, e);
@@ -286,6 +290,7 @@ export const dissolveStaleGroups = (workspaceId, rules) => {
         } else {
           tabsContainer.insertBefore(tab, tabsContainer.firstChild);
         }
+        tab._zaoEjectedAt = Date.now();
         ungrouped++;
       } catch (e) {
         console.error(`${LOG} error ungrouping tab from stale group "${label}":`, e);

@@ -12,7 +12,7 @@
 // `_zaoXxxHook` expando. This prevents double-install if the entry script is
 // re-evaluated (e.g. across module reloads during development).
 
-import { CONFIG, LOG, BUILD_VERSION, isZenColorName, isUnsetLabel } from "./config.mjs";
+import { CONFIG, LOG, BUILD_VERSION, TAB_EJECTION_GRACE_MS, isZenColorName, isUnsetLabel } from "./config.mjs";
 import { getTabUrl, getHostname } from "./tabs.mjs";
 import { readRulesPref, writeRulesPref, isMinimalStyle } from "./rules.mjs";
 import { applyGroupColor, syncAllGroupColors } from "./groups.mjs";
@@ -138,6 +138,18 @@ export const setupTabGroupedHook = () => {
     const hostname = tab ? (() => { try { return getHostname(getTabUrl(tab)); } catch { return "(err)"; } })() : "(no-tab)";
     if (isHookSuppressed()) {
       console.log(`${LOG} TabGrouped: SUPPRESSED (suppressionCount=${_suppressionCount}) for "${hostname}" → "${groupLabel}"`);
+      return;
+    }
+    // Recently-ejected guard: Zen fires a stale TabGrouped to re-attach a
+    // tab seconds after we ejected it (asynchronously, outside our
+    // suppression window). Skip those — that's Zen restoring state we
+    // intentionally undid, not a real user action.
+    const ejectedAt = tab?._zaoEjectedAt;
+    if (ejectedAt && (Date.now() - ejectedAt) < TAB_EJECTION_GRACE_MS) {
+      const age = Date.now() - ejectedAt;
+      console.log(`${LOG} TabGrouped: IGNORED — "${hostname}" was ejected ${age}ms ago; Zen is re-attaching it to "${groupLabel}", rule will NOT grow`);
+      // Clear the marker so a genuine user grouping later still works.
+      delete tab._zaoEjectedAt;
       return;
     }
     console.log(`${LOG} TabGrouped: FIRED (unsuppressed) for "${hostname}" → "${groupLabel}"`);

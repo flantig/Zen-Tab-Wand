@@ -16,7 +16,16 @@ export const LOG = "[ZenTabWand]";
 // behavior or diagnostics change so the Browser Console reveals which build is
 // actually running (vs. a stale module cache). Bump on every push that touches
 // runtime code.
-export const BUILD_VERSION = "1.0.0+ungroup-api.2";
+export const BUILD_VERSION = "1.0.0+ejection-marker.3";
+
+// Time window (ms) after we eject a tab from a group during which any
+// TabGrouped event re-targeting that same tab should be IGNORED by the
+// auto-add hook. Zen's session-restore / group-bookkeeping fires a stale
+// TabGrouped to re-attach the tab moments after we move it; without this
+// window the hook would treat that re-attach as a user action and append the
+// hostname back into the rule. 5s is generous — Zen's re-fire is normally
+// within a few hundred ms.
+export const TAB_EJECTION_GRACE_MS = 5000;
 
 export const CONFIG = {
   // Init polling — wait for gBrowser/gZenWorkspaces/separator to appear at startup.
