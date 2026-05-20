@@ -377,8 +377,8 @@ export const buildBackupRestoreSection = () => {
 
   const exportBtn = h("button", { class: "zao-backup-btn", text: "Export" });
   exportBtn.type = "button";
-  exportBtn.title = "Save current rules + skip-domains as a JSON file";
-  exportBtn.addEventListener("click", () => {
+  exportBtn.title = "Download current rules + skip-domains as a JSON file";
+  exportBtn.addEventListener("click", async () => {
     const payload = {
       rules: readRulesPref() || [],
       skipDomains: readSkipDomainsPref() || [],
@@ -409,31 +409,45 @@ export const buildBackupRestoreSection = () => {
       }
     };
 
-    // Firefox chrome doesn't honor the HTML `<a download>` attribute — that's
-    // a content-page-only feature. The proper path here is nsIFilePicker for
-    // a save-as dialog, then IOUtils.writeUTF8 to write the bytes.
+    // Direct download into the user's default Downloads folder. Uses
+    // Firefox's Downloads API so the saved file also shows up in the browser's
+    // downloads panel (Ctrl+Shift+J) like any other download, with no save
+    // dialog interrupting the flow.
     try {
-      const Cc = window.Components?.classes;
-      const Ci = window.Components?.interfaces;
-      if (!Cc || !Ci) throw new Error("Components.classes / .interfaces not exposed in this scope");
-      const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
-      fp.init(window, "Save Zen Tab Wand backup", Ci.nsIFilePicker.modeSave);
-      fp.appendFilter("JSON file (*.json)", "*.json");
-      fp.defaultString = filename;
-      fp.defaultExtension = "json";
-      fp.open(async (result) => {
-        if (result === Ci.nsIFilePicker.returnCancel) return;
-        try {
-          await IOUtils.writeUTF8(fp.file.path, json);
-          console.log(`${LOG} exported ${payload.rules.length} rule(s) + ${payload.skipDomains.length} skip-domain(s) to ${fp.file.path}`);
-          finish("Saved!");
-        } catch (e) {
-          console.error(`${LOG} writeUTF8 failed:`, e);
-          fallbackToClipboard();
-        }
-      });
+      const { Downloads } = ChromeUtils.importESModule(
+        "resource://gre/modules/Downloads.sys.mjs"
+      );
+      const downloadsDir = await Downloads.getPreferredDownloadsDirectory();
+      const targetPath = PathUtils.join(downloadsDir, filename);
+      // Write the bytes directly — simpler and more reliable than the
+      // Downloads.createDownload route, which needs a source URI that survives
+      // the async start() call. We then register the completed file with
+      // Firefox's download list so it appears in the downloads panel.
+      await IOUtils.writeUTF8(targetPath, json);
+      try {
+        const list = await Downloads.getList(Downloads.PUBLIC);
+        const download = await Downloads.createDownload({
+          source: { url: "data:application/json,zen-tab-wand-export" },
+          target: { path: targetPath },
+        });
+        download.succeeded = true;
+        download.stopped = true;
+        download.canceled = false;
+        download.error = null;
+        download.progress = 100;
+        download.hasProgress = true;
+        download.totalBytes = json.length;
+        download.currentBytes = json.length;
+        await list.add(download);
+      } catch (e) {
+        // Non-fatal — the file is already saved. The downloads panel just
+        // won't have a record. Most users won't notice.
+        console.warn(`${LOG} could not register download with Firefox's download list:`, e);
+      }
+      console.log(`${LOG} exported ${payload.rules.length} rule(s) + ${payload.skipDomains.length} skip-domain(s) → ${targetPath}`);
+      finish("Downloaded!");
     } catch (e) {
-      console.warn(`${LOG} nsIFilePicker unavailable, falling back to clipboard:`, e);
+      console.error(`${LOG} export failed:`, e);
       fallbackToClipboard();
     }
   });

@@ -16,7 +16,7 @@ export const LOG = "[ZenTabWand]";
 // behavior or diagnostics change so the Browser Console reveals which build is
 // actually running (vs. a stale module cache). Bump on every push that touches
 // runtime code.
-export const BUILD_VERSION = "1.0.0+filepicker-export.14";
+export const BUILD_VERSION = "1.0.0+downloads-api.15";
 
 export const CONFIG = {
   // Init polling — wait for gBrowser/gZenWorkspaces/separator to appear at startup.
