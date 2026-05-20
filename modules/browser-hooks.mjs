@@ -12,18 +12,31 @@
 // `_zaoXxxHook` expando. This prevents double-install if the entry script is
 // re-evaluated (e.g. across module reloads during development).
 
-import { CONFIG, LOG, isZenColorName, isUnsetLabel } from "./config.mjs";
+import { CONFIG, LOG, BUILD_VERSION, isZenColorName, isUnsetLabel } from "./config.mjs";
 import { getTabUrl, getHostname } from "./tabs.mjs";
 import { readRulesPref, writeRulesPref, isMinimalStyle } from "./rules.mjs";
 import { applyGroupColor, syncAllGroupColors } from "./groups.mjs";
 
-// Set true by ai.mjs while it's batch-moving tabs / creating groups, so that the
-// TabGrouped events fired by those programmatic mutations don't trigger this hook
-// and overwrite the AI module's per-behavior persistence (e.g. "transient" mode).
-let suppressTabGroupedHook = false;
-export const setTabGroupedHookSuppressed = (val) => {
-  suppressTabGroupedHook = !!val;
+// Counter-based suppression. Any module about to do programmatic tab grouping /
+// moving / ungrouping should pushTabGroupedHookSuppression() before the work
+// and popTabGroupedHookSuppression() in a finally. Counter (vs boolean) lets
+// suppressions nest — e.g. handleOrganizeClick suppresses the whole click AND
+// applyPass1 / applyPass2 also suppress their inner work; the outer suppression
+// stays effective when the inner one pops.
+let _suppressionCount = 0;
+export const pushTabGroupedHookSuppression = () => {
+  _suppressionCount++;
 };
+export const popTabGroupedHookSuppression = () => {
+  _suppressionCount = Math.max(0, _suppressionCount - 1);
+};
+// Legacy boolean-style API kept temporarily for any callers that haven't
+// migrated. `true` ≈ push, `false` ≈ pop. New code should use push/pop.
+export const setTabGroupedHookSuppressed = (val) => {
+  if (val) pushTabGroupedHookSuppression();
+  else popTabGroupedHookSuppression();
+};
+const isHookSuppressed = () => _suppressionCount > 0;
 
 // ─── Helpers (module level so they're reusable + easy to find) ───────────────
 
@@ -119,13 +132,19 @@ export const setupTabGroupedHook = () => {
   if (gBrowser.tabContainer._zaoTabGroupedHook) return;
 
   const handler = (event) => {
-    if (suppressTabGroupedHook) return;
+    const group = event.target;
+    const tab = event.detail;
+    const groupLabel = group?.getAttribute?.("label") ?? "(no-label)";
+    const hostname = tab ? (() => { try { return getHostname(getTabUrl(tab)); } catch { return "(err)"; } })() : "(no-tab)";
+    if (isHookSuppressed()) {
+      console.log(`${LOG} TabGrouped: SUPPRESSED (suppressionCount=${_suppressionCount}) for "${hostname}" → "${groupLabel}"`);
+      return;
+    }
+    console.log(`${LOG} TabGrouped: FIRED (unsuppressed) for "${hostname}" → "${groupLabel}"`);
     try {
       // TabGrouped is dispatched on the tab-group element with the tab in
       // event.detail (see tab.js #updateOnTabGrouped in the Zen source).
       // event.target is the GROUP, NOT the tab — known Zen quirk.
-      const group = event.target;
-      const tab = event.detail;
       if (!tab?.isConnected || !group) return;
 
       const groupName = group.getAttribute?.("label");

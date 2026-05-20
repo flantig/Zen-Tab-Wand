@@ -3,7 +3,7 @@
 // after the "Group Rules" separator. Also injects our stylesheet (Sine's chrome CSS
 // pipeline doesn't reach about:preferences scope).
 
-import { CONFIG, LOG, DEFAULT_RULES, h } from "./config.mjs";
+import { CONFIG, LOG, DEFAULT_RULES, BUILD_VERSION, h } from "./config.mjs";
 import { readRulesPref, writeRulesPref, getAIEngine } from "./rules.mjs";
 import {
   buildRulesEditor,
@@ -14,7 +14,7 @@ import {
 } from "./widget.mjs";
 import { fetchZenColorsFromBrowser } from "./color-picker.mjs";
 
-console.log("[AutoOrganize] prefs-ui.mjs loaded (v1.0.0 build)");
+console.log(`[ZenTabWand] prefs-ui.mjs loaded — build ${BUILD_VERSION}`);
 
 let settingsObserver = null;
 

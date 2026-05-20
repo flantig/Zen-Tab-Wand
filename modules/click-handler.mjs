@@ -2,7 +2,7 @@
 // Sequences: wiggle → consolidate → load rules → dissolve stale → enumerate tabs
 //            → Pass 1 → apply → ungrouped-to-top → sync colors.
 
-import { CONFIG, LOG } from "./config.mjs";
+import { CONFIG, LOG, BUILD_VERSION } from "./config.mjs";
 // CONFIG also exposes the pref name we read inside the AI gate diagnostic below.
 import { loadRules, readSkipDomainsPref, isMinimalStyle, isStrictRulesEnforced, getAIEngine, getOllamaHost, getOllamaModel, getAINewGroupBehavior, getAIExistingBehavior } from "./rules.mjs";
 import { getEligibleTabs } from "./tabs.mjs";
@@ -18,10 +18,11 @@ import { runPass1, applyPass1, matchesDomain } from "./pass1.mjs";
 import { runPass2, applyPass2 } from "./ai.mjs";
 import { checkOllamaReady, reportOllamaError, normalizeOllamaHost, runPass2Ollama, runPass2OllamaFresh, classifyExistingGroupsBatch } from "./ollama.mjs";
 import { showPreviewModal } from "./preview-modal.mjs";
+import { pushTabGroupedHookSuppression, popTabGroupedHookSuppression } from "./browser-hooks.mjs";
 
 // Module-version stamp so we can confirm the latest copy is loaded in the running window.
 // If you don't see this in the Browser Console after restart, ES module cache is stale.
-console.log(`${LOG} click-handler.mjs v1.0.0 loaded`);
+console.log(`${LOG} click-handler.mjs loaded — build ${BUILD_VERSION}`);
 
 const getTidyButton = () =>
   window.gZenWorkspaces?.activeWorkspaceElement?.querySelector(`#${CONFIG.BUTTON_ID}`) || null;
@@ -75,6 +76,16 @@ export const handleOrganizeClick = async () => {
     console.warn(`${LOG} no active workspace`);
     return;
   }
+
+  // Suppress the TabGrouped auto-add hook for the ENTIRE click. Any programmatic
+  // tab movement that happens during the click (Pass 1 moves, dedupe, strict-mode
+  // ejection, skip-domain parking, AI Pass 2, etc.) should be invisible to the
+  // hook — only USER-initiated grouping (drags, "Add to Group" menu) should grow
+  // rules. The push/pop counter survives nested suppressions inside applyPass1 /
+  // applyPass2 / consolidateDuplicateGroups.
+  pushTabGroupedHookSuppression();
+  console.log(`${LOG} click START — build ${BUILD_VERSION} — suppression pushed`);
+  try {
 
   // 1. Merge any duplicate-name groups before lookups assume uniqueness.
   const consolidation = consolidateDuplicateGroups(workspaceId);
@@ -439,5 +450,10 @@ export const handleOrganizeClick = async () => {
     }
   } finally {
     console.groupEnd();
+  }
+
+  } finally {
+    popTabGroupedHookSuppression();
+    console.log(`${LOG} click END — suppression popped`);
   }
 };

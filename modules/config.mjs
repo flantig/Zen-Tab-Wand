@@ -12,6 +12,12 @@
 
 export const LOG = "[ZenTabWand]";
 
+// Build tag, distinct from theme.json's user-facing `version`. Bumped any time
+// behavior or diagnostics change so the Browser Console reveals which build is
+// actually running (vs. a stale module cache). Bump on every push that touches
+// runtime code.
+export const BUILD_VERSION = "1.0.0+strict-suppress.1";
+
 export const CONFIG = {
   // Init polling — wait for gBrowser/gZenWorkspaces/separator to appear at startup.
   MAX_INIT_CHECKS: 50,
