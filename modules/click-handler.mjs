@@ -193,17 +193,32 @@ export const handleOrganizeClick = async () => {
       // the workspace; if AI Pass 2 runs next, it gets a crack at re-placing
       // them. Strict mode never fires in fresh/identify-only modes — those
       // bypass Pass 1 entirely.
-      if (isStrictRulesEnforced()) {
-        const stillGrouped = unmatched.filter((t) => t.currentGroup && t._tab?.isConnected);
-        if (stillGrouped.length > 0) {
-          const ejected = moveTabsToTop(stillGrouped.map((t) => t._tab), workspaceId);
+      const strictOn = isStrictRulesEnforced();
+      console.log(`${LOG} Strict: pref=${strictOn}, unmatched-total=${unmatched.length}`);
+      if (strictOn) {
+        const candidatesInGroups = unmatched.filter((t) => t.currentGroup);
+        const candidatesConnected = candidatesInGroups.filter((t) => t._tab?.isConnected);
+        console.log(`${LOG} Strict: candidates in groups=${candidatesInGroups.length}, connected=${candidatesConnected.length}`);
+        if (candidatesInGroups.length > 0) {
+          console.table(candidatesInGroups.map((t) => ({
+            hostname: t.hostname,
+            currentGroup: t.currentGroup,
+            tabConnected: !!t._tab?.isConnected,
+            tabHasParent: !!t._tab?.parentElement,
+            closestGroupLabel: t._tab?.closest?.("tab-group")?.getAttribute?.("label") ?? "(none)",
+          })));
+        }
+        if (candidatesConnected.length > 0) {
+          const ejected = moveTabsToTop(candidatesConnected.map((t) => t._tab), workspaceId);
+          console.log(`${LOG} Strict: ejected ${ejected} of ${candidatesConnected.length} candidate(s) from rule groups`);
           if (ejected > 0) {
-            console.log(`${LOG} Strict: ejected ${ejected} unmatched tab(s) from rule groups`);
             // The unmatched array's items now have currentGroup === null
             // (their on-DOM state changed). Update the planning shape so
             // downstream Pass 2 / diagnostics see the new reality.
-            for (const t of stillGrouped) t.currentGroup = null;
+            for (const t of candidatesConnected) t.currentGroup = null;
           }
+        } else if (candidatesInGroups.length === 0) {
+          console.log(`${LOG} Strict: no candidates — every unmatched tab is already ungrouped`);
         }
       }
     } else {

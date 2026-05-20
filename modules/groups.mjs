@@ -137,13 +137,20 @@ export const syncAllGroupColors = (workspaceId, rules) => {
 // those tabs become ungrouped and stay ungrouped for the rest of the pipeline.
 // Returns the number of tabs moved.
 export const moveTabsToTop = (tabs, workspaceId) => {
-  if (!workspaceId || !tabs?.length) return 0;
+  if (!workspaceId || !tabs?.length) {
+    console.log(`${LOG} moveTabsToTop: short-circuit — workspaceId=${workspaceId}, tabs=${tabs?.length}`);
+    return 0;
+  }
   const tabsContainer = window.gZenWorkspaces?.activeWorkspaceElement?.tabsContainer;
-  if (!tabsContainer) return 0;
+  if (!tabsContainer) {
+    console.log(`${LOG} moveTabsToTop: tabsContainer not found on activeWorkspaceElement`);
+    return 0;
+  }
   const topAnchor = tabsContainer.firstChild;
   let moved = 0;
+  let skipped = 0;
   for (const tab of tabs) {
-    if (!tab?.isConnected) continue;
+    if (!tab?.isConnected) { skipped++; continue; }
     try {
       if (topAnchor && topAnchor.isConnected) {
         tabsContainer.insertBefore(tab, topAnchor);
@@ -152,9 +159,10 @@ export const moveTabsToTop = (tabs, workspaceId) => {
       }
       moved++;
     } catch (e) {
-      console.error(`${LOG} error moving skipped tab to top:`, e);
+      console.error(`${LOG} moveTabsToTop: insertBefore failed:`, e);
     }
   }
+  if (skipped > 0) console.log(`${LOG} moveTabsToTop: skipped ${skipped} disconnected tab(s)`);
   return moved;
 };
 
