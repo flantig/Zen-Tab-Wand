@@ -21,7 +21,7 @@ If I have no groups and a lot of tabs, I'll run the ai model to create a good ap
 
 In Zen → Sine → Marketplace, search for "Zen Tab Wand" and install. Or sideload by dropping the source into your Sine mods folder.
 
-After install, a wand icon appears in your toolbar's workspace separator. Right-click the icon to open settings.
+After install, a wand icon appears in your toolbar's workspace separator. Left-click the icon to sort.
 
 ![Wand button in the toolbar](docs/images/wand-button.png)
 
