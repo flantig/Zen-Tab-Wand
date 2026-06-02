@@ -22,8 +22,8 @@
 
 import { CONFIG, LOG, BUILD_VERSION, isZenColorName, isUnsetLabel } from "./config.mjs";
 import { getTabUrl, getHostname } from "./tabs.mjs";
-import { readRulesPref, writeRulesPref, readSkipDomainsPref, writeSkipDomainsPref, isMinimalStyle } from "./rules.mjs";
-import { applyGroupColor, syncAllGroupColors } from "./groups.mjs";
+import { readRulesPref, writeRulesPref, readSkipDomainsPref, writeSkipDomainsPref, readCollapsedGroupsPref, writeCollapsedGroupsPref, isMinimalStyle } from "./rules.mjs";
+import { applyGroupColor, syncAllGroupColors, moveTabsToTop } from "./groups.mjs";
 
 // ─── Helpers (module level so they're reusable + easy to find) ───────────────
 
@@ -33,7 +33,9 @@ const applyToRule = (tab, groupName, group) => {
   const hostname = getHostname(getTabUrl(tab));
   if (!hostname) return;
 
-  const rules = readRulesPref() || [];
+  // keepIncomplete: true so we can find an existing in-progress rule by
+  // name and grow it, rather than creating a duplicate with the same name.
+  const rules = readRulesPref({ keepIncomplete: true }) || [];
   const rule = rules.find((r) => r.name === groupName);
 
   if (rule) {
@@ -119,7 +121,13 @@ export const setupTabContextMenu = () => {
 
   const onSubmenuShowing = () => {
     while (popup.firstChild) popup.firstChild.remove();
-    const rules = readRulesPref() || [];
+    // keepIncomplete: true so a named-but-domainless in-progress rule
+    // shows up here — clicking it adds the current tab's hostname as its
+    // first domain (which is exactly the natural way to populate a fresh
+    // rule). A blank-name placeholder row (still untitled in the editor)
+    // is suppressed below so we don't surface an empty menu entry.
+    const allRules = readRulesPref({ keepIncomplete: true }) || [];
+    const rules = allRules.filter((r) => r.name && r.name.length > 0);
     const skipList = readSkipDomainsPref() || [];
     if (rules.length === 0) {
       const placeholder = document.createXULElement("menuitem");
@@ -191,37 +199,254 @@ export const teardownTabContextMenu = () => {
   menu._zaoContextMenuInstalled = null;
 };
 
+// ─── Tab-group right-click: "Dissolve group" ─────────────────────────────────
+//
+// Zen routes right-clicks on tab-group labels to Firefox's standard toolbar
+// context menu (#toolbar-context-menu) — the same menu used for empty
+// sidebar / toolbar customization. We append a "Dissolve group" entry that's
+// only visible when the right-click happened on a tab-group label.
+//
+// "Dissolve group" — ungroup all tabs in the group AND move them to the top
+// of the workspace. The matching rule in settings stays intact so the next
+// wand click would re-create the group from whatever tabs match the rule.
+
+const TOOLBAR_CONTEXT_MENU_ID = "toolbar-context-menu";
+
+// Most recent tab-group that was right-clicked. Set by our capture-phase
+// contextmenu listener; read by the menu's popupshowing handler to decide
+// whether to show the "Dissolve group" item.
+let _pendingDissolveTargetGroup = null;
+
+const dissolveTabGroup = (group) => {
+  if (!group?.isConnected) return;
+  const workspaceId = window.gZenWorkspaces?.activeWorkspace;
+  if (!workspaceId) {
+    console.warn(`${LOG} dissolveTabGroup: no active workspace`);
+    return;
+  }
+  const tabs = Array.from(group.querySelectorAll(`tab[zen-workspace-id="${workspaceId}"]`))
+    .filter((t) => t.isConnected);
+  if (tabs.length === 0) {
+    // Empty group — just remove the element.
+    try { group.remove(); } catch {}
+    return;
+  }
+  const groupName = group.getAttribute?.("label") || "(unnamed)";
+  // moveTabsToTop handles gBrowser.ungroupTab + DOM reparent to top, the same
+  // path strict-mode ejection and skip-domain parking use.
+  const moved = moveTabsToTop(tabs, workspaceId);
+  console.log(`${LOG} dissolved group "${groupName}" — ejected ${moved} tab(s) to top of workspace`);
+  // Group element typically auto-removes when empty, but defensively remove
+  // it ourselves if it lingered.
+  setTimeout(() => {
+    if (group.isConnected && !group.querySelector("tab")) {
+      try { group.remove(); } catch {}
+    }
+  }, 50);
+};
+
+// Capture-phase contextmenu listener — fires BEFORE the toolbar context menu
+// opens so the pending-target is set in time for popupshowing.
+const onContextMenuCapture = (e) => {
+  _pendingDissolveTargetGroup = e.target?.closest?.("tab-group") || null;
+};
+
+let _onMenuShowing = null;
+let _onMenuHidden = null;
+let _onMenuItemCommand = null;
+
+export const setupTabGroupContextMenu = () => {
+  const menu = document.getElementById(TOOLBAR_CONTEXT_MENU_ID);
+  if (!menu) {
+    console.warn(`${LOG} #${TOOLBAR_CONTEXT_MENU_ID} not found — Dissolve group menuitem not installed`);
+    return;
+  }
+  if (menu._zaoDissolveInstalled) return;
+  menu._zaoDissolveInstalled = true;
+
+  // Build menuitem + separator. Hidden by default; shown on popupshowing when
+  // the most recent right-click was on a tab-group.
+  const separator = document.createXULElement("menuseparator");
+  separator.id = "zen-tab-wand-dissolve-separator";
+  separator.setAttribute("hidden", "true");
+
+  const item = document.createXULElement("menuitem");
+  item.id = "zen-tab-wand-dissolve-group";
+  item.setAttribute("label", "Dissolve group");
+  item.setAttribute("hidden", "true");
+
+  // Insert at the top of the menu so it's prominent when shown. (The native
+  // Zen items remain in their normal positions below.)
+  menu.prepend(separator);
+  menu.prepend(item);
+
+  _onMenuShowing = () => {
+    const group = _pendingDissolveTargetGroup;
+    const show = !!group;
+    item.hidden = !show;
+    separator.hidden = !show;
+    if (show) {
+      const name = group.getAttribute?.("label") || "(unnamed)";
+      item.setAttribute("label", `Dissolve group "${name}"`);
+    }
+  };
+  _onMenuHidden = () => {
+    // Clear after the menu closes (whether from click or dismiss) so a
+    // subsequent non-group right-click doesn't surface our item stale.
+    _pendingDissolveTargetGroup = null;
+  };
+  _onMenuItemCommand = () => {
+    const group = _pendingDissolveTargetGroup;
+    if (!group) {
+      console.warn(`${LOG} dissolve clicked but no target group captured`);
+      return;
+    }
+    dissolveTabGroup(group);
+  };
+
+  menu.addEventListener("popupshowing", _onMenuShowing);
+  menu.addEventListener("popuphidden", _onMenuHidden);
+  item.addEventListener("command", _onMenuItemCommand);
+  document.addEventListener("contextmenu", onContextMenuCapture, true);
+
+  console.log(`${LOG} #${TOOLBAR_CONTEXT_MENU_ID}: 'Dissolve group' menuitem installed`);
+};
+
+export const teardownTabGroupContextMenu = () => {
+  const menu = document.getElementById(TOOLBAR_CONTEXT_MENU_ID);
+  if (menu) {
+    if (_onMenuShowing) menu.removeEventListener("popupshowing", _onMenuShowing);
+    if (_onMenuHidden) menu.removeEventListener("popuphidden", _onMenuHidden);
+    menu._zaoDissolveInstalled = false;
+    const item = menu.querySelector?.("#zen-tab-wand-dissolve-group");
+    const sep = menu.querySelector?.("#zen-tab-wand-dissolve-separator");
+    if (item?.isConnected) try { item.remove(); } catch {}
+    if (sep?.isConnected) try { sep.remove(); } catch {}
+  }
+  document.removeEventListener("contextmenu", onContextMenuCapture, true);
+  _onMenuShowing = null;
+  _onMenuHidden = null;
+  _onMenuItemCommand = null;
+  _pendingDissolveTargetGroup = null;
+};
+
 // On every tab-group creation (including session restore on startup), re-apply the
 // rule's color so it survives across browser restarts even if Zen's session storage
 // dropped our previously-set color.
+// Apply our saved state to a tab-group: re-collapse if its label is in the
+// collapsed-set pref, and re-apply its rule color. Used both as the
+// TabGroupCreate event handler (for newly-created groups) and at install
+// time (for groups Zen restored before our script loaded).
+const applyTabGroupRestoreState = (group) => {
+  try {
+    if (!group?.isConnected) return;
+    const label = group.getAttribute?.("label");
+    if (!label) return;
+
+    // Restore collapsed state. Deferred so Zen's own group setup finishes
+    // before we toggle. Use the property setter, not setAttribute, so
+    // Firefox also updates aria-hidden on inner tabs (which the collapse
+    // CSS rule relies on).
+    const collapsedSet = readCollapsedGroupsPref();
+    if (collapsedSet.has(label)) {
+      setTimeout(() => {
+        if (!group.isConnected) return;
+        let applied = false;
+        try { group.collapsed = true; applied = true; } catch {}
+        if (!applied) {
+          try { group.setAttribute("collapsed", ""); } catch {}
+          // Property setter wasn't available — manually mark aria-hidden on
+          // non-selected tabs so our CSS rule actually hides them.
+          for (const tab of group.querySelectorAll("tab")) {
+            if (!tab.hasAttribute("selected")) {
+              try { tab.setAttribute("aria-hidden", "true"); } catch {}
+            }
+          }
+        }
+      }, 0);
+    }
+
+    const rules = readRulesPref() || [];
+    const rule = rules.find((r) => r.name === label);
+    if (rule?.color) {
+      // Defer one tick so Zen's own color setup (which runs synchronously
+      // during group construction) is done before we override.
+      setTimeout(() => {
+        if (group.isConnected) applyGroupColor(group, rule.color);
+      }, 0);
+    }
+  } catch (e) {
+    console.error(`${LOG} applyTabGroupRestoreState error:`, e);
+  }
+};
+
 export const setupTabGroupCreateHook = () => {
   if (typeof gBrowser === "undefined" || !gBrowser.tabContainer) return;
   if (gBrowser.tabContainer._zaoTabGroupCreateHook) return;
 
-  const handler = (event) => {
-    try {
-      const group = event.target;
-      if (!group?.isConnected) return;
-      const label = group.getAttribute?.("label");
-      if (!label) return;
-
-      const rules = readRulesPref() || [];
-      const rule = rules.find((r) => r.name === label);
-      if (!rule?.color) return;
-
-      // Defer one tick so Zen's own color setup (which runs synchronously during
-      // group construction) is done before we override.
-      setTimeout(() => {
-        if (group.isConnected) applyGroupColor(group, rule.color);
-      }, 0);
-    } catch (e) {
-      console.error(`${LOG} TabGroupCreate handler error:`, e);
-    }
-  };
-
+  const handler = (event) => applyTabGroupRestoreState(event.target);
   gBrowser.tabContainer.addEventListener("TabGroupCreate", handler);
   gBrowser.tabContainer._zaoTabGroupCreateHook = handler;
+
+  // Already-existing tab-groups — session restore likely fired
+  // TabGroupCreate BEFORE we installed the listener. Process them now.
+  const existing = document.querySelectorAll("tab-group");
+  if (existing.length > 0) {
+    console.log(`${LOG} TabGroupCreate hook: applying restore state to ${existing.length} pre-existing tab-group(s)`);
+    existing.forEach(applyTabGroupRestoreState);
+  }
   console.log(`${LOG} TabGroupCreate hook installed`);
+};
+
+// Watch every tab-group's `collapsed` attribute and persist the current set
+// of collapsed labels to the pref. Re-applied on TabGroupCreate (above) so
+// the user's collapse choices survive browser restarts.
+export const setupCollapsedStatePersistence = () => {
+  if (window._zaoCollapseObserverInstalled) return;
+  window._zaoCollapseObserverInstalled = true;
+
+  const persist = (group) => {
+    const label = group.getAttribute?.("label");
+    if (!label) return;
+    const isCollapsed = group.hasAttribute("collapsed");
+    const set = readCollapsedGroupsPref();
+    const had = set.has(label);
+    if (isCollapsed && !had) set.add(label);
+    else if (!isCollapsed && had) set.delete(label);
+    else return; // no change
+    writeCollapsedGroupsPref(set);
+  };
+
+  const watch = (group) => {
+    if (group._zaoCollapseAttrObs) return;
+    const obs = new MutationObserver((muts) => {
+      for (const m of muts) {
+        if (m.type === "attributes" && m.attributeName === "collapsed") persist(group);
+      }
+    });
+    obs.observe(group, { attributes: true, attributeFilter: ["collapsed"] });
+    group._zaoCollapseAttrObs = obs;
+  };
+
+  // Existing tab-groups
+  document.querySelectorAll("tab-group").forEach(watch);
+
+  // Future tab-groups (e.g. session restore, user-created via "New Group")
+  const containerObs = new MutationObserver((muts) => {
+    for (const m of muts) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        if (n.tagName?.toLowerCase() === "tab-group") watch(n);
+        else n.querySelectorAll?.("tab-group").forEach(watch);
+      }
+    }
+  });
+  containerObs.observe(document.body || document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+
+  console.log(`${LOG} collapsed-state persistence observer installed`);
 };
 
 // ─── Pref observers ──────────────────────────────────────────────────────────

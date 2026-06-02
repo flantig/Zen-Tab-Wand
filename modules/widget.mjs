@@ -111,9 +111,62 @@ export const buildRulesEditor = (rules) => {
     return cell;
   };
 
+  // Drag-and-drop reorder. Pass 1 is first-match-wins, so the rules array
+  // order determines which group a domain lands in when multiple rules could
+  // claim it. Reordering here changes that priority AND the sidebar's group
+  // display order on next wand click.
+  //
+  // Drag state lives at the editor scope so all rows share it. The DOM
+  // indicator and the actual reorder target both read from `dragToIdx`, so
+  // what the user SEES is exactly what gets applied on drop — no recompute
+  // from clientY at drop-time (which would disagree if the cursor jittered
+  // in the moment between the final dragover and the mouseup).
+  let dragFromIdx = null;
+  let dragToIdx = null;
+
+  const clearDropIndicators = () => {
+    container.querySelectorAll(".zao-row-drop-before, .zao-row-drop-after")
+      .forEach((el) => el.classList.remove("zao-row-drop-before", "zao-row-drop-after"));
+  };
+
+  const reorderRules = (fromIdx, toIdx) => {
+    if (fromIdx === toIdx || fromIdx === toIdx - 1) return; // no-op moves
+    const [moved] = rules.splice(fromIdx, 1);
+    // Adjust toIdx down by one if we removed an item earlier in the list.
+    const adjustedTo = fromIdx < toIdx ? toIdx - 1 : toIdx;
+    rules.splice(adjustedTo, 0, moved);
+    persist();
+    render();
+  };
+
   const renderRow = (rule, idx) => {
     const row = h("div");
     row.className = "zao-row";
+    row.dataset.zaoIdx = String(idx);
+
+    // Drag-handle grip. Only this element is `draggable`, so the user must
+    // grab it explicitly — accidental drags from the name/domain inputs are
+    // impossible. Visual: a six-dot "⋮⋮" glyph.
+    const grip = h("div", { class: "zao-row-grip", text: "⋮⋮" });
+    grip.title = "Drag to reorder";
+    grip.setAttribute("draggable", "true");
+    grip.addEventListener("dragstart", (e) => {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/zao-rule-idx", String(idx));
+      dragFromIdx = idx;
+      dragToIdx = null;
+      // Drag the whole row visually (DataTransfer.setDragImage uses an
+      // element + offset). The grip alone would look strange detached.
+      try { e.dataTransfer.setDragImage(row, 12, row.offsetHeight / 2); } catch {}
+      row.classList.add("zao-row-dragging");
+    });
+    grip.addEventListener("dragend", () => {
+      row.classList.remove("zao-row-dragging");
+      clearDropIndicators();
+      dragFromIdx = null;
+      dragToIdx = null;
+    });
+    row.appendChild(grip);
 
     row.appendChild(renderColorCell(rule));
 
@@ -150,11 +203,74 @@ export const buildRulesEditor = (rules) => {
     return row;
   };
 
+  // Container-level dragover/drop. Some browsers don't fire dragover on the
+  // source element during a drag, so per-row listeners miss events when the
+  // cursor is still over the row being dragged. Listening at the container
+  // covers all rows uniformly — we hit-test the cursor's clientY against
+  // each row's bounding rect to figure out where the drop would land.
+  if (!container._zaoContainerDragListenersInstalled) {
+    container._zaoContainerDragListenersInstalled = true;
+    container.addEventListener("dragover", (e) => {
+      if (!e.dataTransfer.types.includes("text/zao-rule-idx")) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const rows = Array.from(container.querySelectorAll(".zao-row"));
+      if (rows.length === 0) return;
+      // Find the row whose vertical range contains the cursor. If the cursor
+      // is above the first row, target index 0 / top half. If below the last
+      // row, target the last row's bottom half.
+      let targetRow = null;
+      let targetIdx = -1;
+      let above = true;
+      const firstRect = rows[0].getBoundingClientRect();
+      const lastRect = rows[rows.length - 1].getBoundingClientRect();
+      if (e.clientY < firstRect.top) {
+        targetRow = rows[0];
+        targetIdx = 0;
+        above = true;
+      } else if (e.clientY > lastRect.bottom) {
+        targetRow = rows[rows.length - 1];
+        targetIdx = rows.length - 1;
+        above = false;
+      } else {
+        for (let i = 0; i < rows.length; i++) {
+          const r = rows[i].getBoundingClientRect();
+          if (e.clientY >= r.top && e.clientY <= r.bottom) {
+            targetRow = rows[i];
+            targetIdx = i;
+            above = (e.clientY - r.top) < r.height / 2;
+            break;
+          }
+        }
+      }
+      if (!targetRow) return;
+      const newToIdx = above ? targetIdx : targetIdx + 1;
+      if (dragToIdx === newToIdx) return; // no DOM update needed
+      dragToIdx = newToIdx;
+      clearDropIndicators();
+      targetRow.classList.toggle("zao-row-drop-before", above);
+      targetRow.classList.toggle("zao-row-drop-after", !above);
+    });
+    container.addEventListener("drop", (e) => {
+      const fromStr = e.dataTransfer.getData("text/zao-rule-idx");
+      if (!fromStr) return;
+      e.preventDefault();
+      const fromIdx = parseInt(fromStr, 10);
+      const toIdx = dragToIdx;
+      clearDropIndicators();
+      dragFromIdx = null;
+      dragToIdx = null;
+      if (toIdx === null) return;
+      reorderRules(fromIdx, toIdx);
+    });
+  }
+
   render = () => {
     container.replaceChildren();
 
     const header = h("div");
     header.className = "zao-header";
+    header.appendChild(h("div")); // grip column (no label)
     header.appendChild(h("div")); // color column (no label)
     const c1 = h("div");
     c1.textContent = "Category";
@@ -189,11 +305,15 @@ export const buildRulesEditor = (rules) => {
     container.appendChild(addRow);
   };
 
-  // Refresh widget state from the pref. Called by both the pref observer and the
-  // dialog-open watcher to pick up external changes (e.g. via the tab right-click submenu, AI Pass 2 grow, or Backup Import).
+  // Refresh widget state from the pref. Called by both the pref observer and
+  // the dialog-open watcher to pick up external changes (e.g. via the tab
+  // right-click submenu, AI Pass 2 grow, or Backup Import). Passes
+  // `keepIncomplete: true` so a blank row the user just added (and which
+  // persists to disk as `{name:"", domains:[]}`) survives the round-trip
+  // and continues to appear in the editor across browser restarts.
   const refreshFromPref = (reason) => {
     if (!container.isConnected) return;
-    const fresh = readRulesPref();
+    const fresh = readRulesPref({ keepIncomplete: true });
     if (!fresh) return;
     if (JSON.stringify(fresh) === JSON.stringify(rules)) return;
     console.log(`${LOG} widget refresh (${reason}): ${rules.length} → ${fresh.length} rule(s)`);
@@ -380,7 +500,9 @@ export const buildBackupRestoreSection = () => {
   exportBtn.title = "Download current rules + skip-domains as a JSON file";
   exportBtn.addEventListener("click", async () => {
     const payload = {
-      rules: readRulesPref() || [],
+      // keepIncomplete: true so a user's in-progress rules are included in
+      // the backup — otherwise restoring would silently drop them.
+      rules: readRulesPref({ keepIncomplete: true }) || [],
       skipDomains: readSkipDomainsPref() || [],
     };
     const json = JSON.stringify(payload, null, 2);
@@ -503,7 +625,10 @@ export const buildBackupRestoreSection = () => {
         }
 
         const current = {
-          rules: (readRulesPref() || []).length,
+          // Match the widget's view (includes in-progress rules) so the
+          // "N → M" confirmation reflects what the user actually sees in
+          // the editor, not the filtered wand-click count.
+          rules: (readRulesPref({ keepIncomplete: true }) || []).length,
           skip: (readSkipDomainsPref() || []).length,
         };
         const summaryLines = [];

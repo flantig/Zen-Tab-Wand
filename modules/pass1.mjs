@@ -2,7 +2,7 @@
 // Pure logic over rules + tab info; applyPass1 mutates the DOM via gBrowser APIs.
 
 import { LOG } from "./config.mjs";
-import { findExistingGroup, expandIfCollapsed, applyGroupColor, findSafeInsertAnchor } from "./groups.mjs";
+import { findExistingGroup, expandIfCollapsed, collapseGroup, applyGroupColor, findSafeInsertAnchor } from "./groups.mjs";
 
 // Match a hostname against a single rule-domain pattern.
 //   "host.com"    matches the bare host AND any subdomain
@@ -91,7 +91,11 @@ export const applyPass1 = (byGroup, workspaceId, rules) => {
     if (existing?.isConnected) {
       console.log(`${LOG} reusing existing group "${groupName}" (${tabsForGroup.length} tab(s) to move in)`);
       try {
-        expandIfCollapsed(existing);
+        // Remember if the group was collapsed BEFORE we touched it. If so,
+        // we re-collapse after adding the new tabs so the user's collapse
+        // state isn't lost AND the new tabs get properly aria-hidden'd
+        // via the property setter on collapse.
+        const wasCollapsed = expandIfCollapsed(existing);
         for (const tab of tabsForGroup) {
           if (!tab.isConnected) continue;
           if (tab.closest("tab-group") === existing) continue;
@@ -99,6 +103,13 @@ export const applyPass1 = (byGroup, workspaceId, rules) => {
           movedToExisting++;
         }
         if (colorByName.has(groupName)) applyGroupColor(existing, colorByName.get(groupName));
+        if (wasCollapsed) {
+          // Defer one tick so Firefox's tab-insertion bookkeeping completes
+          // before we collapse — otherwise the new tab's aria-hidden may
+          // not be set in the same paint.
+          const groupRef = existing;
+          setTimeout(() => collapseGroup(groupRef), 0);
+        }
       } catch (e) {
         console.error(`${LOG} error moving tabs into "${groupName}":`, e);
         errors.push({ group: groupName, error: e.message });

@@ -15,7 +15,7 @@ export const LOG = "[ZenTabWand]";
 // Build tag — mirrors theme.json's `version` for shipped releases, and gets a
 // `+tag.N` suffix for in-progress iterative builds so the Browser Console
 // reveals which build is actually running (vs. a stale module cache).
-export const BUILD_VERSION = "1.0.1";
+export const BUILD_VERSION = "1.0.2";
 
 export const CONFIG = {
   // Init polling — wait for gBrowser/gZenWorkspaces/separator to appear at startup.
@@ -43,6 +43,11 @@ export const CONFIG = {
 
   RULES_PREF: "extensions.zen-auto-organize.rules-json",
   SKIP_DOMAINS_PREF: "extensions.zen-auto-organize.skip-domains-json",
+  // Set of tab-group LABELS currently collapsed. JSON-encoded string array.
+  // Updated on every collapse-toggle; re-applied on every TabGroupCreate so
+  // session restore preserves collapsed/expanded state across browser
+  // restarts (Zen's own session save loses the `collapsed` attribute).
+  COLLAPSED_GROUPS_PREF: "extensions.zen-auto-organize.collapsed-groups-json",
   MINIMAL_STYLE_PREF: "extensions.zen-auto-organize.minimal-style",
   STRICT_RULES_PREF: "extensions.zen-auto-organize.strict-rules",
 
@@ -56,6 +61,10 @@ export const CONFIG = {
   AI_OLLAMA_HOST_PREF: "extensions.zen-auto-organize.ai-ollama-host",
   AI_OLLAMA_MODEL_PREF: "extensions.zen-auto-organize.ai-ollama-model",
   AI_OLLAMA_WARMUP_PREF: "extensions.zen-auto-organize.ai-ollama-warmup",
+  // One-shot flags: set true after the user dismisses the first-time AI
+  // engine resource-warning modal. Each engine has its own acknowledgement.
+  OLLAMA_ACKNOWLEDGED_PREF: "extensions.zen-auto-organize.ollama-acknowledged",
+  LOCAL_ACKNOWLEDGED_PREF: "extensions.zen-auto-organize.local-acknowledged",
   AI_OLLAMA_HOST_DEFAULT: "http://localhost:11434",
   AI_OLLAMA_MODEL_DEFAULT: "qwen2.5:1.5b",
 
@@ -66,7 +75,19 @@ export const CONFIG = {
   // local AI only fires on slam dunks.
   AI_EXISTING_GROUP_THRESHOLD: 0.65,    // min (raw + boost) cosine sim for "tab belongs to existing group"
   AI_EXISTING_GROUP_BOOST: 0.10,        // added to existing-group sim
-  AI_EMBEDDING_BATCH_SIZE: 5,           // tabs per parallel embedding batch
+  AI_EMBEDDING_BATCH_SIZE: 5,           // tabs per parallel embedding batch (small-workspace default)
+
+  // Local-AI chunking. When the count of unmatched tabs to embed exceeds the
+  // chunking threshold, the engine switches to a more conservative pipeline:
+  //   - Hostname dedupe: only one tab per unique hostname is embedded; the
+  //     resulting embedding is reused for all siblings on the same domain.
+  //   - Yield between batches: `await setTimeout(0)` after each batch keeps
+  //     the event loop alive so the browser doesn't freeze.
+  // Together these keep the AI pass responsive on very large workspaces.
+  AI_LOCAL_CHUNK_THRESHOLD: 75,         // unmatched count above which chunking + dedupe kicks in
+  AI_LOCAL_BATCH_SIZE_PREF: "extensions.zen-auto-organize.ai-local-batch-size",
+  AI_LOCAL_BATCH_SIZE_DEFAULT: 30,      // pref default; user-overridable
+  AI_LOCAL_CONFIRM_THRESHOLD: 500,      // unmatched count above which a confirmation modal is shown before Pass 2
 
   // chrome:// URLs served by Sine from this mod's directory.
   RULES_URL: "chrome://sine/content/zen-tab-wand/rules.json",

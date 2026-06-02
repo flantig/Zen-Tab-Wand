@@ -3,7 +3,7 @@
 // window) and `about:preferences*` (the settings page). Branches on window.location
 // to wire the right submodules in each context.
 
-import { CONFIG, LOG } from "./modules/config.mjs";
+import { CONFIG, LOG, BUILD_VERSION } from "./modules/config.mjs";
 import { domCache } from "./modules/tabs.mjs";
 import { readRulesPref, getAIEngine, getOllamaHost, getOllamaModel, isOllamaWarmupEnabled } from "./modules/rules.mjs";
 import { syncAllGroupColors } from "./modules/groups.mjs";
@@ -16,7 +16,10 @@ import {
 import {
   setupTabContextMenu,
   teardownTabContextMenu,
+  setupTabGroupContextMenu,
+  teardownTabGroupContextMenu,
   setupTabGroupCreateHook,
+  setupCollapsedStatePersistence,
   setupMinimalStylePrefObserver,
   teardownMinimalStylePrefObserver,
 } from "./modules/browser-hooks.mjs";
@@ -43,7 +46,9 @@ const tryInitializeBrowser = () => {
       addButtonToAllSeparators();
       setupWorkspaceHooks();
       setupTabContextMenu();
+      setupTabGroupContextMenu();
       setupTabGroupCreateHook();
+      setupCollapsedStatePersistence();
       setupMinimalStylePrefObserver();
 
       // Apply colors to groups that were restored before our hook installed
@@ -62,7 +67,7 @@ const tryInitializeBrowser = () => {
         warmupOllama(getOllamaHost(), getOllamaModel());
       }
 
-      console.log(`${LOG} initialized (browser)`);
+      console.log(`${LOG} initialized (browser) — build ${BUILD_VERSION}`);
       return true;
     }
   } catch (e) {
@@ -103,6 +108,7 @@ const cleanup = () => {
     domCache.invalidate();
     teardownSettingsObserver();
     teardownTabContextMenu();
+    teardownTabGroupContextMenu();
     teardownMinimalStylePrefObserver();
   } catch (e) {
     console.error(`${LOG} cleanup error:`, e);
