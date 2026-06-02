@@ -90,6 +90,7 @@ For each tab, pick a single label that is one of:
 - "skipped" if the tab really doesn't fit with anything
 
 Guidance:
+- Use an existing label only when the tab is the SAME KIND of thing as that label's example domains — same service, same provider, or a near-equivalent substitute. The example domains define what the label means. Do NOT use an existing label as a generic catch-all because its name sounds related. If no existing label closely fits, create a new label or "skipped".
 - Several tabs about the same topic should share the SAME label. For example, three different gaming sites (news, marketplace, ranking) all belong under ONE shared label.
 - Aim for at most 1-2 new labels per batch. Broad buckets beat narrow ones.
 - A new label that covers only one tab is unusual — only pick one if that tab is clearly its own distinct topic with no siblings here.
@@ -112,8 +113,14 @@ export const buildFreshPrompt = (tabs, snippets) =>
 Tabs:
 ${renderTabList(tabs, snippets)}
 
+Each tab line may include a Summary with bracketed signals:
+- [type: ...] — the page type (article, video, product, profile, website, book, music.song, etc.). This is the strongest signal for intent: 'article' tabs are reading, 'video' tabs are watching, 'product' tabs are shopping.
+- [site: ...] — the site's brand name (e.g. "BBC News", "Vimeo").
+- [topic: ...] — the page's main heading.
+
 Guidelines:
-- Group tabs that share a topic under ONE category name. Several gaming sites all get the same gaming category, several retailers all get the same shopping category, etc.
+- Use the signals above to infer what the user is DOING with each tab, not just what website they're on. Prefer category names that reflect that intent — "Reading", "Watching", "Research", "Shopping", "Work tools" — over narrow topic labels like "BBC", "Vimeo Videos".
+- When multiple tabs share a [type:] or describe the same underlying activity, they belong in the same category even if their hostnames differ.
 - Pick short, broad category names (1-3 words, Title Case).
 - Aim for a small total number of categories — broad buckets beat narrow ones. Most workspaces have 3-6 categories total.
 - A category should have at least 2 tabs. Single-tab categories are usually wrong.

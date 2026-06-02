@@ -63,7 +63,7 @@ export const classifyExistingGroupsBatch = async (unmatched, rules, host, model)
     throw new Error("Ollama classify: returned non-object JSON");
   }
 
-  console.log(`${LOG} Ollama raw classification:`, parsed);
+  console.debug(`${LOG} Ollama raw classification:`, parsed);
 
   // Validate categories — small models occasionally hallucinate names that
   // weren't in the list. Case-insensitive match to be forgiving of "shopping"
@@ -103,7 +103,7 @@ const clusterUnmatchedNewGroups = async (leftover, host, model) => {
   const r = await ollamaGenerateJson(host, model, prompt);
   if (!r.ok) throw new Error(`Ollama cluster: ${r.error}`);
 
-  console.log(`${LOG} Ollama raw clustering:`, r.parsed);
+  console.debug(`${LOG} Ollama raw clustering:`, r.parsed);
 
   const validIdx = (i) => Number.isFinite(i) && i >= 0 && i < leftover.length;
   const seen = new Set();
@@ -165,13 +165,19 @@ export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
   // and any failure (auth, timeout, non-HTML, no meta tag) returns "" so the
   // tab just falls back to title-only context — never blocks classification.
   const t0 = performance.now();
-  const snippets = await Promise.all(deduped.map((t) => fetchPageSnippet(t.url)));
+  const snippets = await Promise.all(deduped.map((t) => {
+    const url = t.url || "";
+    if (!url.startsWith("http://") && !url.startsWith("https://")) return "";
+    return fetchPageSnippet(url);
+  }));
   const hit = snippets.filter((s) => s).length;
   console.log(`${LOG} Ollama: fetched page snippets for ${hit}/${deduped.length} tab(s) in ${Math.round(performance.now() - t0)}ms`);
+  console.groupCollapsed(`${LOG} Ollama snippet detail (collapse)`);
   console.log(
     `${LOG} Ollama snippet detail:\n` +
     deduped.map((t, i) => `  ${t.hostname || "(no host)"} → ${snippets[i] ? `"${snippets[i].slice(0, 80)}${snippets[i].length > 80 ? "…" : ""}"` : "(no snippet)"}`).join("\n")
   );
+  console.groupEnd();
 
   const prompt = buildUnifiedPrompt(rules, deduped, snippets);
   const r = await ollamaGenerateJson(host, model, prompt);
@@ -181,7 +187,7 @@ export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
     throw new Error("Ollama unified: returned non-object JSON");
   }
 
-  console.log(`${LOG} Ollama unified classification:`, parsed);
+  console.debug(`${LOG} Ollama unified classification:`, parsed);
 
   // Lookup table for canonicalizing an existing rule name (case-insensitive).
   const ruleNameByLower = new Map(
@@ -221,10 +227,79 @@ export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
   // 1-tab survivors are honored as the model's intent rather than dropped.
   let newGroups = [...newGroupsByKey.values()];
   if (newGroups.length >= 2) {
-    newGroups = await mergeNewCategoriesPass(newGroups, host, model);
+    try {
+      newGroups = await mergeNewCategoriesPass(newGroups, host, model);
+    } catch (e) {
+      console.warn(`${LOG} Ollama merge-pass errored — keeping un-merged groups:`, e);
+    }
   }
+  // 3rd phase — fuzzy name dedupe (catches what the LLM merge missed).
+  newGroups = dedupeSimilarNewGroups(newGroups);
 
   return { assignedToExisting, newGroups, skipped };
+};
+
+// ─── 3rd-phase name-based dedupe ─────────────────────────────────────────────
+// Catches near-identical names the LLM merge pass missed. Symptoms we've seen
+// in the wild that motivated this:
+//   - "Content Unavailable" + "Content Unavailability"     (morphology drift)
+//   - "Communication Apps" + "Communication Tools"         (different suffix)
+//   - "Project Management" + "Project Management Tools"    (substring extra)
+// Strategy: normalize each name to a stem + drop trailing generic words
+// (Tools / Apps / Platforms / ...), then merge groups with the same normalized
+// form. The canonical name kept is whichever group appears FIRST in the input
+// — typically the LLM's "cleaner" first proposal.
+
+const TRAILING_GENERICS = new Set([
+  "tools", "tool", "apps", "app", "platforms", "platform",
+  "services", "service", "sites", "site", "websites", "website",
+  "products", "product", "stuff", "things",
+]);
+
+const lightStem = (word) =>
+  word
+    .replace(/(ability|ibility)$/i, "")
+    .replace(/(able|ible)$/i, "")
+    .replace(/(ation|ization)$/i, "")
+    .replace(/(ing)$/i, "")
+    .replace(/(ies)$/i, "y")
+    .replace(/(s)$/i, "");
+
+const normalizeNameForDedupe = (name) => {
+  const words = String(name || "")
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+  while (words.length > 1 && TRAILING_GENERICS.has(words[words.length - 1])) {
+    words.pop();
+  }
+  return words.map(lightStem).join(" ");
+};
+
+const dedupeSimilarNewGroups = (newGroups) => {
+  if (!newGroups || newGroups.length < 2) return newGroups || [];
+  const byNorm = new Map(); // normalized → index in `out`
+  const out = [];
+  let mergedCount = 0;
+  for (const g of newGroups) {
+    const norm = normalizeNameForDedupe(g.name);
+    if (byNorm.has(norm)) {
+      const existing = out[byNorm.get(norm)];
+      console.log(`${LOG} Ollama 3rd-pass dedupe: "${g.name}" → "${existing.name}" (normalized match: "${norm}")`);
+      existing.tabs.push(...g.tabs);
+      mergedCount++;
+    } else {
+      byNorm.set(norm, out.length);
+      out.push({ ...g });
+    }
+  }
+  if (mergedCount > 0) {
+    console.log(`${LOG} Ollama 3rd-pass dedupe: collapsed ${mergedCount} similar-named cluster(s) (${newGroups.length} → ${out.length})`);
+  }
+  return out;
 };
 
 // ─── Merge pass ──────────────────────────────────────────────────────────────
@@ -249,7 +324,8 @@ const mergeNewCategoriesPass = async (newGroups, host, model) => {
     return newGroups;
   }
 
-  console.log(`${LOG} Ollama merge-pass took ${Math.round(performance.now() - t0)}ms; raw response:`, parsed);
+  console.log(`${LOG} Ollama merge-pass took ${Math.round(performance.now() - t0)}ms`);
+  console.debug(`${LOG} Ollama merge-pass raw response:`, parsed);
 
   // Schema: { "Original Name": "Target Name", ... } — for each original, the
   // model picks a target. Originals sharing a target get merged into one
@@ -325,66 +401,82 @@ export const runPass2OllamaFresh = async (allTabs) => {
   const host = getOllamaHost();
   const model = getOllamaModel();
 
-  // Dedup duplicate tabs (same hostname + title) — same reasoning as the
-  // unified path. Avoids inconsistent answers across copies of the same tab.
-  const dedupKey = (t) => `${t.hostname || ""}\x00${t.title || ""}`;
-  const dedupIndexByKey = new Map();
-  const deduped = [];
-  const origToDeduped = allTabs.map((t) => {
-    const k = dedupKey(t);
-    if (dedupIndexByKey.has(k)) return dedupIndexByKey.get(k);
-    const i = deduped.length;
-    dedupIndexByKey.set(k, i);
-    deduped.push(t);
-    return i;
-  });
-  if (deduped.length < allTabs.length) {
-    console.log(`${LOG} Ollama fresh: deduplicated ${allTabs.length} tabs → ${deduped.length} unique`);
-  }
-
-  const t0 = performance.now();
-  const snippets = await Promise.all(deduped.map((t) => fetchPageSnippet(t.url)));
-  const hit = snippets.filter((s) => s).length;
-  console.log(`${LOG} Ollama fresh: fetched snippets for ${hit}/${deduped.length} tab(s) in ${Math.round(performance.now() - t0)}ms`);
-
-  const prompt = buildFreshPrompt(deduped, snippets);
-  const r = await ollamaGenerateJson(host, model, prompt);
-  if (!r.ok) {
-    console.error(`${LOG} Ollama fresh failed (${r.errorType}):`, r.error);
-    showToast(`Ollama fresh classification failed: ${r.error}`);
-    return { ...empty, skipped: allTabs, failed: r.error };
-  }
-  const parsed = r.parsed;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    console.warn(`${LOG} Ollama fresh: non-object JSON, returning all as skipped`);
-    return { ...empty, skipped: allTabs };
-  }
-
-  console.log(`${LOG} Ollama fresh classification:`, parsed);
-
-  const newGroupsByKey = new Map();
-  const skipped = [];
-  for (let i = 0; i < allTabs.length; i++) {
-    const dedupIdx = origToDeduped[i];
-    const value = parsed[dedupIdx] !== undefined ? parsed[dedupIdx] : parsed[String(dedupIdx)];
-    const raw = stripMetaPrefix(value == null ? "" : String(value).trim());
-    const lower = raw.toLowerCase();
-    if (!raw || lower === "skipped" || lower === "none") {
-      skipped.push(allTabs[i]);
-      continue;
+  try {
+    // Dedup duplicate tabs (same hostname + title) — same reasoning as the
+    // unified path. Avoids inconsistent answers across copies of the same tab.
+    const dedupKey = (t) => `${t.hostname || ""}\x00${t.title || ""}`;
+    const dedupIndexByKey = new Map();
+    const deduped = [];
+    const origToDeduped = allTabs.map((t) => {
+      const k = dedupKey(t);
+      if (dedupIndexByKey.has(k)) return dedupIndexByKey.get(k);
+      const i = deduped.length;
+      dedupIndexByKey.set(k, i);
+      deduped.push(t);
+      return i;
+    });
+    if (deduped.length < allTabs.length) {
+      console.log(`${LOG} Ollama fresh: deduplicated ${allTabs.length} tabs → ${deduped.length} unique`);
     }
-    if (!newGroupsByKey.has(lower)) {
-      newGroupsByKey.set(lower, { name: raw, tabs: [] });
-    }
-    newGroupsByKey.get(lower).tabs.push(allTabs[i]);
-  }
 
-  // Run the merge pass to consolidate over-specialized categories. No
-  // post-filter — we trust whatever survives. See unifiedClassifyOllama
-  // for the rationale (singletons honor model intent rather than discard it).
-  let newGroups = [...newGroupsByKey.values()];
-  if (newGroups.length >= 2) {
-    newGroups = await mergeNewCategoriesPass(newGroups, host, model);
+    const t0 = performance.now();
+    const snippets = await Promise.all(deduped.map((t) => {
+      const url = t.url || "";
+      if (!url.startsWith("http://") && !url.startsWith("https://")) return "";
+      return fetchPageSnippet(url);
+    }));
+    const hit = snippets.filter((s) => s).length;
+    console.log(`${LOG} Ollama fresh: fetched snippets for ${hit}/${deduped.length} tab(s) in ${Math.round(performance.now() - t0)}ms`);
+
+    const prompt = buildFreshPrompt(deduped, snippets);
+    const r = await ollamaGenerateJson(host, model, prompt);
+    if (!r.ok) {
+      console.error(`${LOG} Ollama fresh failed (${r.errorType}):`, r.error);
+      showToast(`Ollama fresh classification failed: ${r.error}`);
+      return { ...empty, skipped: allTabs, failed: r.error };
+    }
+    const parsed = r.parsed;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      console.warn(`${LOG} Ollama fresh: non-object JSON, returning all as skipped`);
+      return { ...empty, skipped: allTabs };
+    }
+
+    console.debug(`${LOG} Ollama fresh classification:`, parsed);
+
+    const newGroupsByKey = new Map();
+    const skipped = [];
+    for (let i = 0; i < allTabs.length; i++) {
+      const dedupIdx = origToDeduped[i];
+      const value = parsed[dedupIdx] !== undefined ? parsed[dedupIdx] : parsed[String(dedupIdx)];
+      const raw = stripMetaPrefix(value == null ? "" : String(value).trim());
+      const lower = raw.toLowerCase();
+      if (!raw || lower === "skipped" || lower === "none") {
+        skipped.push(allTabs[i]);
+        continue;
+      }
+      if (!newGroupsByKey.has(lower)) {
+        newGroupsByKey.set(lower, { name: raw, tabs: [] });
+      }
+      newGroupsByKey.get(lower).tabs.push(allTabs[i]);
+    }
+
+    // Run the merge pass to consolidate over-specialized categories. No
+    // post-filter — we trust whatever survives. See unifiedClassifyOllama
+    // for the rationale (singletons honor model intent rather than discard it).
+    let newGroups = [...newGroupsByKey.values()];
+    if (newGroups.length >= 2) {
+      try {
+        newGroups = await mergeNewCategoriesPass(newGroups, host, model);
+      } catch (e) {
+        console.warn(`${LOG} Ollama merge-pass errored — keeping un-merged groups:`, e);
+      }
+    }
+    // 3rd phase — fuzzy name dedupe (catches what the LLM merge missed).
+    newGroups = dedupeSimilarNewGroups(newGroups);
+    return { assignedToExisting: [], newGroups, skipped };
+  } catch (e) {
+    console.error(`${LOG} Ollama fresh classification failed:`, e);
+    showToast(`Ollama fresh classification failed: ${e.message || e}`);
+    return { ...empty, skipped: allTabs, failed: e.message || String(e) };
   }
-  return { assignedToExisting: [], newGroups, skipped };
 };

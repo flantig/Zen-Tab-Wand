@@ -13,9 +13,13 @@ import { showToast } from "./ui-toast.mjs";
 
 const PING_TIMEOUT_MS = 3000;
 // Classification calls: generous because the FIRST request after the daemon
-// has been idle includes a model warm-up (~5–10s for 1.5B on CPU/GPU, longer
-// for bigger models). Subsequent calls are sub-second.
-const GENERATE_TIMEOUT_MS = 60000;
+// has been idle includes a model warm-up (~5–10s for 1.5B on CPU/GPU, much
+// longer for 7B+). The actual inference time also scales with prompt size —
+// 100+ unique tabs classified in a single prompt against a 7B model can run
+// ~30–90s even when warm. 180s covers cold-load + large workspaces with
+// headroom; sub-second once warm on small workloads, so this only kicks in
+// as an upper bound.
+const GENERATE_TIMEOUT_MS = 180000;
 const WARMUP_TIMEOUT_MS = 30000;
 
 // Returns the keep_alive fragment to spread into a generate-call body —

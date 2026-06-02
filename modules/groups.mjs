@@ -34,12 +34,48 @@ export const findExistingGroup = (name, workspaceId) => {
   }
 };
 
+// Zen toggles the `collapsed` attribute as an HTML boolean: present (with
+// empty-string value) = collapsed, absent = expanded. The previous check
+// of `=== "true"` never matched and silently no-op'd. We also use the
+// property setter when available, because Firefox's MozTabbrowserTabGroup
+// setter both flips the attribute AND clears `aria-hidden` on inner tabs —
+// crucial for our collapse CSS rule which keys off aria-hidden.
+//
+// Returns true if the group WAS collapsed (caller can decide to re-collapse
+// after its work is done so newly-added tabs join the collapse properly).
 export const expandIfCollapsed = (groupEl) => {
+  if (!groupEl?.isConnected) return false;
+  if (!groupEl.hasAttribute("collapsed")) return false;
+  let didFlip = false;
+  try { groupEl.collapsed = false; didFlip = true; } catch {}
+  if (!didFlip) {
+    try { groupEl.removeAttribute("collapsed"); } catch {}
+    // Property setter wasn't available; manually clear aria-hidden so the
+    // newly-visible tabs don't stay invisibly hidden by our CSS rule.
+    for (const tab of groupEl.querySelectorAll("tab[aria-hidden]")) {
+      try { tab.removeAttribute("aria-hidden"); } catch {}
+    }
+  }
+  const labelEl = groupEl.querySelector(".tab-group-label");
+  if (labelEl) labelEl.setAttribute("aria-expanded", "true");
+  return true;
+};
+
+// Inverse of expandIfCollapsed — set collapsed back on. Uses the property
+// setter so Firefox properly re-applies aria-hidden to ALL current tabs
+// (including any that were added while the group was expanded).
+export const collapseGroup = (groupEl) => {
   if (!groupEl?.isConnected) return;
-  if (groupEl.getAttribute("collapsed") === "true") {
-    groupEl.setAttribute("collapsed", "false");
-    const labelEl = groupEl.querySelector(".tab-group-label");
-    if (labelEl) labelEl.setAttribute("aria-expanded", "true");
+  let didFlip = false;
+  try { groupEl.collapsed = true; didFlip = true; } catch {}
+  if (!didFlip) {
+    try { groupEl.setAttribute("collapsed", ""); } catch {}
+    // Fallback aria-hidden if property setter wasn't available
+    for (const tab of groupEl.querySelectorAll("tab")) {
+      if (!tab.hasAttribute("selected")) {
+        try { tab.setAttribute("aria-hidden", "true"); } catch {}
+      }
+    }
   }
 };
 
@@ -58,7 +94,7 @@ export const applyGroupColor = (groupEl, color) => {
       groupEl.style.removeProperty("--tab-group-color-pale");
       groupEl.style.removeProperty("--tab-group-line-color");
       groupEl.color = color;
-      console.log(`${LOG} colored "${groupEl.getAttribute("label")}" → ${color} (named)`);
+      console.debug(`${LOG} colored "${groupEl.getAttribute("label")}" → ${color} (named)`);
     } catch (e) {
       console.error(`${LOG} group.color setter failed:`, e);
     }
@@ -73,7 +109,7 @@ export const applyGroupColor = (groupEl, color) => {
       groupEl.style.setProperty("--tab-group-color-invert", invert, "important");
       groupEl.style.setProperty("--tab-group-color-pale", pale, "important");
       groupEl.style.setProperty("--tab-group-line-color", color, "important");
-      console.log(`${LOG} colored "${groupEl.getAttribute("label")}" → ${color} (hex)`);
+      console.debug(`${LOG} colored "${groupEl.getAttribute("label")}" → ${color} (hex)`);
     } catch (e) {
       console.error(`${LOG} style.setProperty failed:`, e);
     }

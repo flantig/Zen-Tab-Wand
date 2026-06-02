@@ -2,6 +2,21 @@
    Borders/backgrounds are derived from currentColor via color-mix so the
    widget adapts to whatever theme Zen is running. */
 
+/* --- Tab-group collapse fix.
+   Firefox's MozTabbrowserTabGroup sets `aria-hidden="true"` on non-selected
+   tabs when the group is collapsed, but leaves the visual hiding to CSS.
+   Firefox's standard horizontal tab strip ships that CSS; Zen's vertical
+   sidebar tabs don't (see zen-browser/desktop#11134, #11739). So clicking
+   the group chevron toggles `collapsed` but the tabs stay visible.
+   This rule hides them as users expect — selected tab still shows.
+
+   Note: Zen toggles `collapsed=""` (empty-string boolean attribute), NOT
+   `collapsed="true"`. The `[collapsed]` selector matches attribute *presence*,
+   which is the right shape for HTML boolean attributes regardless of value. */
+tab-group[collapsed] tab[aria-hidden="true"] {
+  display: none !important;
+}
+
 /* --- Look & Feel: minimal mode for rule-matched tab-groups.
    Overrides Zen's per-group color custom properties with values derived from
    the toolbar / urlbar so groups blend into the chrome instead of standing out. */
@@ -78,10 +93,47 @@ tab-group.zao-minimal {
 .zao-row,
 .zao-add-row {
   display: grid;
-  grid-template-columns: 28px 180px 1fr 28px;
+  /* grip | color | category | domains | remove */
+  grid-template-columns: 20px 28px 180px 1fr 28px;
   gap: 10px;
   padding: 8px 12px;
   align-items: center;
+}
+
+/* --- Drag-handle grip for reordering rules.
+   Only this element is `draggable`; the rest of the row stays clickable for
+   editing inputs / pills without triggering a drag. */
+.zao-row-grip {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: -3px;
+  text-align: center;
+  opacity: 0.35;
+  transition: opacity 120ms;
+}
+.zao-row-grip:hover {
+  opacity: 0.85;
+}
+.zao-row-grip:active,
+.zao-row.zao-row-dragging .zao-row-grip {
+  cursor: grabbing;
+}
+.zao-row.zao-row-dragging {
+  opacity: 0.45;
+}
+
+/* Drop indicators — thin colored bar at the top/bottom edge of the hovered
+   row while a drag is in progress. Uses currentColor so it picks up the
+   user's theme. Inset box-shadow offset is OPPOSITE-edge-relative: positive
+   Y draws at the top edge, negative Y at the bottom edge. */
+.zao-row.zao-row-drop-before {
+  box-shadow: 0 2px 0 0 color-mix(in srgb, currentColor 60%, transparent) inset;
+}
+.zao-row.zao-row-drop-after {
+  box-shadow: 0 -2px 0 0 color-mix(in srgb, currentColor 60%, transparent) inset;
 }
 
 /* Skip-domains editor — a single pill row beneath the "Skip Domains" Sine
@@ -429,6 +481,88 @@ dialog.zao-preview-dialog[open] {
 }
 dialog.zao-preview-dialog::backdrop {
   background: rgba(0, 0, 0, 0.45);
+}
+
+/* First-time Local AI warning modal. Single-button countdown-acknowledge
+   pattern: the button label starts as "3  I Understand" and counts down to
+   "I Understand" over 3 seconds, only becoming clickable when the countdown
+   completes. Solid (non-translucent) background regardless of Windows Mica
+   theming. */
+dialog.zao-warning-dialog {
+  padding: 22px 26px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 12px;
+  max-width: 460px;
+  width: min(460px, 92vw);
+  background: Canvas;
+  color: CanvasText;
+  box-shadow: 0 14px 48px rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+  line-height: 1.5;
+}
+dialog.zao-warning-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+.zao-warning-title {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.zao-warning-dialog p {
+  margin: 0 0 10px 0;
+}
+.zao-warning-lead {
+  font-size: 13px;
+  opacity: 0.85;
+  margin-bottom: 14px;
+}
+.zao-warning-list {
+  list-style: none;
+  margin: 0 0 18px 0;
+  padding: 0;
+}
+.zao-warning-list li {
+  padding: 8px 12px;
+  margin: 6px 0;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  border-left: 3px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 4px;
+  line-height: 1.45;
+}
+.zao-warning-list strong {
+  font-weight: 600;
+}
+.zao-warning-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.zao-warning-confirm {
+  appearance: none;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: inherit;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 7px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.zao-warning-confirm:not([disabled]):hover {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+.zao-warning-confirm[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+.zao-warning-link {
+  color: LinkText;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.zao-warning-link:hover {
+  filter: brightness(1.15);
 }
 
 .zao-preview-header {

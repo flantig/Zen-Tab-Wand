@@ -3,7 +3,7 @@
 //            → Pass 1 → apply → ungrouped-to-top → sync colors.
 
 import { CONFIG, LOG, BUILD_VERSION } from "./config.mjs";
-// CONFIG also exposes the pref name we read inside the AI gate diagnostic below.
+// (CONFIG is used inside the click pipeline for thresholds, pref names, and DOM ids.)
 import { loadRules, readSkipDomainsPref, isMinimalStyle, isStrictRulesEnforced, getAIEngine, getOllamaHost, getOllamaModel, getAINewGroupBehavior, getAIExistingBehavior } from "./rules.mjs";
 import { getEligibleTabs } from "./tabs.mjs";
 import {
@@ -15,7 +15,7 @@ import {
   syncAllGroupColors,
 } from "./groups.mjs";
 import { runPass1, applyPass1, matchesDomain } from "./pass1.mjs";
-import { runPass2, applyPass2 } from "./ai.mjs";
+import { runPass2, runPass2Fresh, applyPass2 } from "./ai.mjs";
 import { checkOllamaReady, reportOllamaError, normalizeOllamaHost, runPass2Ollama, runPass2OllamaFresh, classifyExistingGroupsBatch } from "./ollama.mjs";
 import { showPreviewModal } from "./preview-modal.mjs";
 
@@ -126,16 +126,20 @@ export const handleOrganizeClick = async () => {
   // 5. Pass 1 matching + diagnostic logging.
   const { assignments, byGroup, unmatched, alreadyCorrect } = runPass1(tabs, rules);
 
-  // Always-visible diagnostic (outside the collapsed group below) so we can see
-  // the AI gate decision regardless of console group expansion state.
+  // Read AI engine + new-group behavior up-front so the Pass 1 diagnostic table
+  // below can show the action that would follow given the current mode.
   const aiEngine = getAIEngine();
-  const newGroupBehavior = aiEngine === "ollama" ? getAINewGroupBehavior() : "";
+  // Read the new-group behavior for any AI engine — local now also supports
+  // fresh-categories / identify-only (clustering into hostname-named groups).
+  // The other behaviors (auto-add / always-add / prompt) imply LLM-style
+  // semantic naming and are no-ops on local; we just fall through to the
+  // existing-only path in that case.
+  const newGroupBehavior = aiEngine !== "off" ? getAINewGroupBehavior() : "";
   const isFreshMode = newGroupBehavior === "fresh-categories";
   const isIdentifyOnly = newGroupBehavior === "identify-only";
   // Both fresh and identify-only reclassify ALL tabs and bypass Pass 1's apply.
   // Identify-only also gates the apply step on user confirmation via modal.
   const isFreshLike = isFreshMode || isIdentifyOnly;
-  console.log(`${LOG} AI gate (pre-pass): engine=${aiEngine}${newGroupBehavior ? `, new-group=${newGroupBehavior}` : ""}, unmatched=${unmatched.length}`);
 
   // Wrapped in try/finally so console.groupEnd always runs even if a later step
   // throws — otherwise the next click's logs would nest inside this group.
@@ -234,18 +238,74 @@ export const handleOrganizeClick = async () => {
             reportOllamaError(host, model, status);
             pass2 = { assignedToExisting: [], newGroups: [], skipped: isFreshMode ? tabs : unmatched };
           } else {
-            console.log(`${LOG} Ollama ready at ${normalizeOllamaHost(host)} (model: ${model})`);
+            console.debug(`${LOG} Ollama ready at ${normalizeOllamaHost(host)} (model: ${model})`);
             const t0 = performance.now();
             if (isFreshLike) {
               pass2 = await runPass2OllamaFresh(tabs);
             } else {
               pass2 = await runPass2Ollama(unmatched, rules);
+              // Stickiness for rule-considering modes: don't let the AI
+              // pull a tab OUT of a user-organized group INTO a brand-new
+              // AI-invented category. Reclassifying into an EXISTING group
+              // (assignedToExisting) is still allowed — that's the wand
+              // correcting wrong placement. Fresh / identify-only opt out
+              // of this by design (those modes are full re-orgs).
+              if (pass2.newGroups?.length) {
+                const displaced = [];
+                for (const g of pass2.newGroups) {
+                  const stays = [];
+                  for (const t of g.tabs) {
+                    if (t.currentGroup) displaced.push(t);
+                    else stays.push(t);
+                  }
+                  g.tabs = stays;
+                }
+                pass2.newGroups = pass2.newGroups.filter((g) => g.tabs.length > 0);
+                if (displaced.length > 0) {
+                  console.log(
+                    `${LOG} stickiness: kept ${displaced.length} already-grouped tab(s) in place rather than moving to new AI group(s):`,
+                    displaced.map((t) => `${t.hostname} (in "${t.currentGroup}")`)
+                  );
+                  pass2.skipped = [...(pass2.skipped || []), ...displaced];
+                }
+              }
             }
             console.log(`${LOG} Ollama Pass 2 took ${Math.round(performance.now() - t0)}ms`);
           }
         } else {
-          // Local engine — never runs in fresh mode; that's Ollama-only.
-          pass2 = await runPass2(unmatched, rules, workspaceId);
+          // Local engine. Two sub-paths:
+          //   - fresh-categories / identify-only: cluster ALL eligible tabs
+          //     into new groups (ignores rules). This is the ONLY Local mode
+          //     that creates new groups.
+          //   - auto-add / transient (or any other value): existing-only fit.
+          //     The dropdown's choice between auto-add vs transient feeds
+          //     getAIExistingBehavior() to decide whether the rule grows.
+          // Soft cap: very large input sets take real time on the Local engine
+          // even with chunking + dedupe. Confirm with the user before running
+          // so a 3000-tab workspace doesn't ambush them. Cancellation just
+          // produces an empty-plan pass2 result; the outer flow (color sync,
+          // settle, etc.) still runs.
+          const localInput = isFreshLike ? tabs : unmatched;
+          let cancelled = false;
+          if (localInput.length > CONFIG.AI_LOCAL_CONFIRM_THRESHOLD) {
+            const proceed = window.confirm(
+              `You have ${localInput.length} ${isFreshLike ? "" : "unmatched "}tabs.\n\n` +
+              `Running the Local AI on this many can take minutes and briefly lag the browser.\n\n` +
+              `Continue?`
+            );
+            if (!proceed) {
+              console.log(`${LOG} Pass 2 cancelled by user (soft cap at ${CONFIG.AI_LOCAL_CONFIRM_THRESHOLD})`);
+              pass2 = { assignedToExisting: [], newGroups: [], skipped: localInput };
+              cancelled = true;
+            }
+          }
+          if (!cancelled) {
+            if (isFreshLike) {
+              pass2 = await runPass2Fresh(tabs);
+            } else {
+              pass2 = await runPass2(unmatched, rules, workspaceId);
+            }
+          }
         }
         if (pass2.assignedToExisting.length > 0 || pass2.newGroups.length > 0) {
           console.log(`${LOG} Pass 2 plan: ${pass2.assignedToExisting.length} to existing group(s), ${pass2.newGroups.length} new group(s), ${pass2.skipped.length} skipped`);
@@ -264,40 +324,44 @@ export const handleOrganizeClick = async () => {
           }
 
           // Decide whether to show the Plan Mode modal:
-          //   - Plan Mode (identify-only) → always show (it IS the modal mode)
+          //   - Plan Mode (identify-only) → always show (it IS the modal mode);
+          //     applies to BOTH engines (local Fresh is hostname-named so the
+          //     modal lets the user rename / re-assign before applying)
           //   - Auto-add / Always-add → show so user can veto rule mutations
-          //     before they hit the rules table
+          //     before they hit the rules table. Ollama-only — those modes imply
+          //     LLM-style semantic naming.
           //   - Transient (either) → no modal (it's just a temp move per user)
           //   - Prompt → no modal (Zen handles per-group via its own edit modal)
           //   - Fresh-categories → no modal (no rule mutations happen here)
           let planToApply = pass2;
           let showModal = false;
           let modalReason = "";
-          if (aiEngine === "ollama") {
-            if (isIdentifyOnly) {
+          if (isIdentifyOnly) {
+            showModal = true;
+            modalReason = "Plan Mode";
+          } else if (aiEngine === "ollama" && !isFreshMode && newGroupBehavior !== "prompt") {
+            const existingBehavior = getAIExistingBehavior();
+            const flags = [];
+            if (existingBehavior === "always-add") flags.push("always-add");
+            if (newGroupBehavior === "auto-add") flags.push("auto-add");
+            if (flags.length > 0) {
               showModal = true;
-              modalReason = "Plan Mode";
-            } else if (!isFreshMode && newGroupBehavior !== "prompt") {
-              const existingBehavior = getAIExistingBehavior();
-              const flags = [];
-              if (existingBehavior === "always-add") flags.push("always-add");
-              if (newGroupBehavior === "auto-add") flags.push("auto-add");
-              if (flags.length > 0) {
-                showModal = true;
-                modalReason = flags.join(" + ");
-              }
+              modalReason = flags.join(" + ");
             }
           }
 
           if (showModal) {
-            console.log(`${LOG} Plan Mode modal opening (${modalReason}) — user must confirm before rules mutate`);
+            console.debug(`${LOG} Plan Mode modal opening (${modalReason}) — user must confirm before rules mutate`);
             planToApply = await showPreviewModal({
               plan: pass2,
               // "Re-assign to new" — open-ended clustering for pending tabs.
-              // Always uses the fresh classifier so the model isn't biased
-              // by existing-rule context (the user explicitly wants NEW).
+              // Always uses a fresh classifier so the model isn't biased by
+              // existing-rule context (the user explicitly wants NEW). Routes
+              // to whichever engine the user picked.
               onReassignToNew: async (pendingTabs) => {
-                const r = await runPass2OllamaFresh(pendingTabs);
+                const r = aiEngine === "local"
+                  ? await runPass2Fresh(pendingTabs)
+                  : await runPass2OllamaFresh(pendingTabs);
                 return { newGroups: r.newGroups, skipped: r.skipped };
               },
               // "Re-assign to planned" — constrained-vocabulary classification.

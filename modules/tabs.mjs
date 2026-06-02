@@ -32,15 +32,16 @@ export const getHostname = (url) => {
 
 // ─── Page snippet for AI classification context ──────────────────────────────
 //
-// Fetches a tab's URL and parses out a short summary from <meta name="description">
-// (or og:description / twitter:description). Gives the AI classifier real semantic
-// context for niche sites whose hostnames + titles alone aren't enough.
+// Fetches a tab's URL and extracts a structured signal block for the AI
+// classifier: page type (article/video/product/profile/...), site brand,
+// main heading, and description. The page TYPE is the strongest signal for
+// Arc-style intent-driven groupings ("Articles I'm reading" vs "Shopping").
 //
 // Fetches happen from chrome-privileged code with the user's cookie jar
 // (credentials: "include"), so authed pages return the real content rather
 // than a login wall. CORS doesn't apply at chrome scope.
 
-const SNIPPET_MAX_CHARS = 200;
+const SNIPPET_MAX_CHARS = 400;
 const SNIPPET_FETCH_TIMEOUT_MS = 3000;
 
 // Minimal HTML entity decoder — covers the entities that appear in meta tags.
@@ -68,13 +69,39 @@ const extractMetaContent = (html, name) => {
   return "";
 };
 
+// First <h1> — usually the page's main topic. Strip any nested tags from the
+// captured content. Returns "" if no h1 present (e.g. SPAs that hydrate later,
+// or sites that use h1 for the site logo / navigation only).
+const extractFirstH1 = (html) => {
+  const m = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  if (!m?.[1]) return "";
+  return decodeHtmlEntities(m[1].replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
+};
+
+// Pull a structured signal block instead of just the meta description. Each
+// element is tagged ([type: ...], [site: ...], [topic: ...]) so the LLM can
+// see them as distinct features rather than one blurry sentence. Empty
+// strings drop out — small sites with no OG metadata still get whatever's
+// available.
 const extractSnippetFromHtml = (html) => {
   const desc =
     extractMetaContent(html, "description") ||
     extractMetaContent(html, "og:description") ||
     extractMetaContent(html, "twitter:description");
-  if (!desc) return "";
-  return desc.replace(/\s+/g, " ").slice(0, SNIPPET_MAX_CHARS).trim();
+  const ogType = extractMetaContent(html, "og:type");
+  const ogSiteName = extractMetaContent(html, "og:site_name");
+  const h1 = extractFirstH1(html);
+
+  const parts = [];
+  if (ogType) parts.push(`[type: ${ogType.slice(0, 30)}]`);
+  if (ogSiteName) parts.push(`[site: ${ogSiteName.slice(0, 40)}]`);
+  if (h1 && h1.toLowerCase() !== desc.toLowerCase()) {
+    parts.push(`[topic: ${h1.slice(0, 100)}]`);
+  }
+  if (desc) parts.push(desc.slice(0, 250));
+
+  if (parts.length === 0) return "";
+  return parts.join(" ").replace(/\s+/g, " ").slice(0, SNIPPET_MAX_CHARS).trim();
 };
 
 // Returns "" on any failure (404, timeout, network error, non-HTML response,

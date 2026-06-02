@@ -47,8 +47,12 @@ The tab doesn't move — only the rule grows. Click the wand afterwards to actua
 | Engine | What it does | Setup |
 |---|---|---|
 | **Off** | Rules only. Tabs without a matching rule stay where they are. | — |
-| **Local** | Firefox's bundled tab-embedding model. Only assigns tabs to *existing* groups; conservative by design, no new groups. No setup. | None — built in. |
-| **Ollama** | A local Ollama daemon. Can both assign tabs into existing groups AND invent new ones, with a merge pass and an optional interactive **Plan Mode** modal where you preview the AI's plan before applying. | Install [Ollama](https://ollama.com), then `ollama pull qwen2.5:1.5b` (or a bigger model if you have the VRAM). |
+| **Local** | Firefox's bundled tab-embedding model. Assigns tabs to existing groups and — as of v1.0.2 — can also invent new groups (Auto-add / Transient / Fresh categories). Names are derived from hostnames, intent labels, or extracted keywords. No setup. | None — built in. |
+| **Ollama** | A local Ollama daemon. Assigns tabs into existing groups and invents new ones, with a merge pass and an optional interactive **Plan Mode** where you preview the plan before applying. | Install [Ollama](https://ollama.com), then `ollama pull qwen2.5:1.5b` (or a bigger model if you have the VRAM). |
+
+The first time you pick **Local** or **Ollama** in settings, a one-shot warning modal explains the resource cost (CPU/RAM for Local, VRAM for Ollama) and asks you to acknowledge before the engine is allowed to run.
+
+Both engines fetch a small page-context snippet (`og:type`, `og:site_name`, first `<h1>`, `<meta name="description">`) for each unmatched tab to classify on more than just the URL.
 
 For Ollama, the default model is `qwen2.5:1.5b` (~1 GB, runs on most GPUs). If you have 8+ GB VRAM, `qwen2.5:7b` is noticeably more accurate — change the model name in settings.
 
@@ -97,26 +101,52 @@ Ollama runs entirely on your machine — no API keys, no cloud, no per-token cos
 
 If you have questions about Ollama itself (other models, GPU compatibility, remote hosts, etc.) head to the [Ollama project site](https://ollama.com) and its [GitHub README](https://github.com/ollama/ollama).
 
+## Choosing an AI model
+
+The mod ships with two engines and lets you pick any model your Ollama install can run.
+
+| Engine / model | Size on disk | What it can do | System impact |
+|---|---|---|---|
+| **Local** (`Mozilla/smart-tab-embedding`, built in) | ~100 MB | Assigns tabs to existing groups only. No new categories. | Light, CPU only |
+| `qwen2.5:0.5b` | ~400 MB | Basic clustering. Vague names. | Tiny, ~500 MB VRAM |
+| `qwen2.5:1.5b` (default) | ~1 GB | Decent clustering, simple names. | Small, ~1.5 GB VRAM |
+| `qwen2.5:3b` | ~2 GB | Better naming and category logic. | Medium, ~3 GB VRAM |
+| `qwen2.5:7b` | ~5 GB | Strong naming and merging. Recommended. | Mid, ~6-8 GB VRAM |
+| `qwen2.5:14b` | ~10 GB | Excellent on ambiguous tabs. | High, ~12 GB VRAM |
+| `qwen2.5:32b` | ~22 GB | Best quality. Diminishing returns vs 14b. | Workstation, 24+ GB VRAM |
+
 ## Modes when AI creates a new group
 
-(Only relevant when the AI engine is set to Ollama.)
+Applies to both engines. The Local engine supports **Auto-add**, **Transient**, and **Fresh categories**; Ollama supports all five.
 
 | Mode | What happens |
 |---|---|
-| **Auto-add** | AI creates the group AND saves a rule with the tabs' hostnames. Rules grow over time. Modal asks you to confirm. |
+| **Auto-add** | AI creates the group AND saves a rule with the tabs' hostnames. Rules grow over time. Ollama shows a confirmation modal; Local applies directly. |
 | **Transient** | AI creates the group, no rule saved. Fast, no confirmation. |
-| **Prompt** | Opens Zen's edit modal for each new group so you can rename/recolor. |
-| **Fresh categories** | AI re-tidies **all** tabs into fresh categories, ignoring your rules. Like Arc Browser's Tidy. |
-| **Plan Mode** | Shows the proposed plan in a modal first. You toggle each group keep/skip, optionally click "Re-assign" to redo the unkept tabs, then Apply. |
+| **Prompt** (Ollama only) | Opens Zen's edit modal for each new group so you can rename/recolor. |
+| **Fresh categories** | Re-tidies **all** tabs into fresh categories, ignoring your rules. Like Arc Browser's Tidy. Local Fresh names clusters from a shared hostname (e.g. `Github & Gitlab`), an intent label (e.g. `Reading`), or extracted keywords (e.g. `Yu-Gi-Oh`) depending on the strongest signal in the cluster. Ollama Fresh runs a third-phase fuzzy-name dedupe that catches near-duplicates like `Content Unavailable` + `Content Unavailability`. |
+| **Plan Mode** (Ollama only) | Shows the proposed plan in a modal first. You toggle each group keep/skip, optionally click "Re-assign" to redo the unkept tabs into your existing groups, then Apply. |
 
 ![Plan Mode modal](docs/images/plan-mode-modal.png)
 
+### Stickiness in Auto-add / Always-add
+
+In Ollama **Auto-add** (new group) and **Always-add** (existing group) modes, tabs already sitting in a group you organized by hand won't be pulled out into a brand-new AI-invented group. They can still move into another *existing* group if the AI is confident. This keeps your manual organization from getting churned every time you click the wand.
+
 ## Other settings
 
-- **Skip Domains** — a list of hostnames the wand should never touch. Tabs matching any pattern get ejected from any group and parked at the top of the workspace on every click. Useful for tabs you want to always keep visible and ungrouped.
+- **Skip Domains** — a list of hostnames the wand should never touch. Tabs matching any pattern get ejected from any group and parked at the top of the workspace on every click. Useful for tabs you want to always keep visible and ungrouped. Grow the list from a tab right-click → **Add "host" to Rule…** → **Skip**.
 - **Strict rule enforcement** — when on, tabs sitting inside a group whose rule doesn't list their hostname get ejected to the top on every wand click. Off by default.
 - **Minimal style** — strips the colored backgrounds from groups for a flatter look.
 - **Keep Ollama model warm** — preloads the model at browser startup and keeps it in VRAM between clicks. Faster, but uses VRAM continuously.
+- **Local AI batch size** — only used when there are more than 75 unmatched tabs. The Local engine switches into a chunked pipeline that dedupes by hostname (one embedding per unique domain) and yields between batches so the browser stays responsive. Smaller batches = gentler on CPU, larger = faster. Above 500 unmatched tabs a confirmation modal appears before the AI pass runs.
+- **Rule reordering** — drag the handle on the left of any row in the Group Rules table to reorder rules. Order determines match priority when a hostname appears in more than one rule.
+- **Persistent collapsed groups** — collapsed/expanded state of every tab-group is saved and re-applied across browser restarts (Zen's own session save drops this).
+
+## Right-click menus
+
+- **On a tab** — `Add "host" to Rule…` opens a submenu listing every current rule plus a **Skip** entry. Rules already containing the hostname show a checkmark and are disabled.
+- **On a tab-group header** — `Dissolve group` removes the group container and leaves its tabs in place at the top of the workspace. Useful when an AI-invented group missed the mark.
 
 ## Backup & Restore
 

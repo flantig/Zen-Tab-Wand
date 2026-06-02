@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.0.2 — 2026-06-01
+
+### Added
+- **Local AI engine now honours the "When AI creates a new group" dropdown** with all three behaviours: Auto-add, Transient, Fresh categories (previously Ollama-only).
+- **Local Fresh mode.** Clusters every tab into new hostname/intent-named groups using the bundled embedding model.
+- **Plan Mode (identify-only) modal now works for the Local engine**, not just Ollama.
+- **Page-context snippets** (`og:type`, `og:site_name`, first `h1`, description) are now fetched and fed to both engines for better classification.
+- **3rd-phase fuzzy name dedupe for Ollama Fresh.** Catches near-duplicate cluster names like "Content Unavailable" + "Content Unavailability" or "Communication Apps" + "Communication Tools".
+- **Stickiness in Ollama unified mode.** Tabs already in an existing group can't be pulled into brand-new AI-invented groups — only into other existing groups.
+- **Skip Domains** setting (carry-over polish on top of 1.0.1's section).
+- **Strict rule enforcement** option that ejects tabs from a group when their hostname isn't listed in that group's rule.
+- **Drag-handle reorder** of rules in the settings rules editor.
+- **Right-click "Dissolve group"** on tab-groups; **"Add to Rule…" submenu** on tabs.
+- **Collapsed-group state persists across browser restarts.**
+- **Chunking + hostname-dedupe for Local AI** on workspaces with >75 unmatched tabs. Configurable batch size; soft-cap confirmation modal at >500 tabs.
+- **First-time warning modal** when selecting the Ollama or Local AI engine (fires once per engine).
+- **README "Choosing an AI model" table** with qwen2.5 size variants.
+
+### Changed
+- **Ollama generate timeout raised from 60s → 180s.** Accommodates qwen2.5:7b classifying 100+ unique tabs in one pass.
+- **Unified-classifier prompt** now carries an explicit anti-catch-all instruction so the model stops dumping unrelated tabs into a generic existing rule like "Utils".
+
+### Fixed
+- **Auto-sort into a collapsed group.** Target group now re-collapses correctly and the newly-added tabs are properly `aria-hidden`.
+- **Collapse state survives session restore.** Zen's session save drops the `collapsed` attribute; we re-apply it from a persisted pref on workspace load.
+- **In-progress rules with no domains yet** now survive a browser restart and show up in the right-click "Add to Rule…" submenu.
+
 ## 1.0.1 — 2026-05-19
 
 ### Added

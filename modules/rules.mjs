@@ -17,7 +17,19 @@ import { CONFIG, DEFAULT_RULES, LOG, ZEN_COLOR_NAMES, isValidHex } from "./confi
  *
  * Malformed entries are silently dropped — invalid rules don't break valid ones.
  */
-export const readRulesPref = () => {
+/**
+ * Read the rules pref.
+ *
+ * @param {Object} [opts]
+ * @param {boolean} [opts.keepIncomplete=false]
+ *   When true, in-progress rules (empty name or empty domains) are returned
+ *   alongside complete ones. The settings widget passes this so a user can
+ *   add a blank row, close the browser, and find it still waiting to be
+ *   filled in next session. The wand-click pipeline (`loadRules`) uses the
+ *   default — incomplete rules are no-ops at apply-time anyway, but keeping
+ *   them out of the logs is cleaner.
+ */
+export const readRulesPref = ({ keepIncomplete = false } = {}) => {
   try {
     const raw = Services.prefs.getStringPref(CONFIG.RULES_PREF, "");
     if (!raw.trim()) return null;
@@ -36,9 +48,10 @@ export const readRulesPref = () => {
           if (ZEN_COLOR_NAMES.has(c) || isValidHex(c)) out.color = c;
         }
         return out;
-      })
-      .filter((r) => r.name.length > 0 && r.domains.length > 0);
-    return cleaned;
+      });
+    return keepIncomplete
+      ? cleaned
+      : cleaned.filter((r) => r.name.length > 0 && r.domains.length > 0);
   } catch (e) {
     console.warn(`${LOG} rules pref parse failed:`, e);
     return null;
@@ -74,6 +87,31 @@ export const writeSkipDomainsPref = (domains) => {
     Services.prefs.setStringPref(CONFIG.SKIP_DOMAINS_PREF, JSON.stringify(domains));
   } catch (e) {
     console.error(`${LOG} failed to write skip-domains pref:`, e);
+  }
+};
+
+// Collapsed-group persistence. Zen's session manager doesn't save the
+// `collapsed` attribute on tab-groups, so they all come back expanded after
+// a browser restart. We track which group labels were collapsed in a pref
+// and re-apply on TabGroupCreate (session restore).
+export const readCollapsedGroupsPref = () => {
+  try {
+    const raw = Services.prefs.getStringPref(CONFIG.COLLAPSED_GROUPS_PREF, "");
+    if (!raw.trim()) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr.filter((s) => typeof s === "string") : []);
+  } catch (e) {
+    console.warn(`${LOG} collapsed-groups pref parse failed:`, e);
+    return new Set();
+  }
+};
+
+export const writeCollapsedGroupsPref = (labels) => {
+  try {
+    const arr = Array.from(labels);
+    Services.prefs.setStringPref(CONFIG.COLLAPSED_GROUPS_PREF, JSON.stringify(arr));
+  } catch (e) {
+    console.error(`${LOG} failed to write collapsed-groups pref:`, e);
   }
 };
 
@@ -182,11 +220,41 @@ export const isOllamaWarmupEnabled = () => {
   }
 };
 
+// User-configurable batch size for the Local-AI chunking path. Larger values
+// = more parallel embedding calls per chunk (faster but heavier on RAM/CPU).
+// Smaller values = gentler on the system but slower overall.
+//
+// Stored as a string pref because Sine's preferences.json schema doesn't have
+// a native int type — we parse + clamp on read so any stray about:config
+// edit can't break the pipeline.
+export const getLocalAIBatchSize = () => {
+  try {
+    const raw = Services.prefs.getStringPref(
+      CONFIG.AI_LOCAL_BATCH_SIZE_PREF,
+      String(CONFIG.AI_LOCAL_BATCH_SIZE_DEFAULT),
+    );
+    const v = parseInt(raw, 10);
+    if (!Number.isFinite(v) || v < 1) return CONFIG.AI_LOCAL_BATCH_SIZE_DEFAULT;
+    return Math.min(200, Math.max(1, v));
+  } catch {
+    return CONFIG.AI_LOCAL_BATCH_SIZE_DEFAULT;
+  }
+};
+
 // What to do when AI assigns a tab to an existing rule-matched group.
 //   "always-add" — append the tab's hostname to that rule's domains (default)
 //   "transient"  — move the tab into the group, but don't touch the rule
+//
+// On the Local engine the existing-behavior row is hidden in settings — the
+// new-group-behavior dropdown drives BOTH decisions instead. Map:
+//   Auto-add  → always-add  (grow the rule)
+//   Transient → transient   (don't grow)
+//   Fresh     → transient   (Fresh ignores rules; the answer doesn't matter)
 export const getAIExistingBehavior = () => {
   try {
+    if (getAIEngine() === "local") {
+      return getAINewGroupBehavior() === "auto-add" ? "always-add" : "transient";
+    }
     return Services.prefs.getStringPref(CONFIG.AI_EXISTING_BEHAVIOR_PREF, "always-add");
   } catch {
     return "always-add";

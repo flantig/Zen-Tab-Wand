@@ -84,5 +84,11 @@
     "label": "Keep Ollama model warm — preloads at browser start and keeps it loaded between clicks (faster tidy clicks; uses VRAM continuously)",
     "property": "extensions.zen-auto-organize.ai-ollama-warmup",
     "defaultValue": true
+  },
+  {
+    "type": "string",
+    "label": "Local AI batch size (only used when >75 unmatched tabs; smaller = gentler on CPU, larger = faster)",
+    "property": "extensions.zen-auto-organize.ai-local-batch-size",
+    "defaultValue": "30"
   }
 ]
