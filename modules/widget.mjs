@@ -13,14 +13,29 @@ import {
   openEmojiPopover,
   updateIconButtonAppearance,
 } from "./emoji-picker.mjs";
+import { syncAllGroupColors } from "./groups.mjs";
 
 let rulesPrefObserver = null;
+
+export const syncLiveGroupAppearances = (rules) => {
+  try {
+    const browserWin = Services.wm.getMostRecentWindow("navigator:browser");
+    const browserDoc = browserWin?.document;
+    if (!browserDoc) return;
+    syncAllGroupColors(null, rules, browserDoc);
+  } catch (e) {
+    console.warn(`${LOG} live group appearance sync failed:`, e);
+  }
+};
 
 export const buildRulesEditor = (rules) => {
   const container = h("div");
   container.className = "zao-rules-editor";
 
-  const persist = () => writeRulesPref(rules);
+  const persist = () => {
+    writeRulesPref(rules);
+    syncLiveGroupAppearances(rules);
+  };
 
   // Forward-declared because some helpers (e.g. renderPill's remove button) need
   // to call render() to redraw the whole table after a mutation. They're defined
@@ -672,7 +687,10 @@ export const buildBackupRestoreSection = () => {
         if (validRules) summaryLines.push(`Rules:  ${current.rules} → ${validRules.length}`);
         if (validSkip) summaryLines.push(`Skip:   ${current.skip} → ${validSkip.length}`);
         if (!window.confirm(`Replace your settings?\n\n${summaryLines.join("\n")}`)) return;
-        if (validRules) writeRulesPref(validRules);
+        if (validRules) {
+          writeRulesPref(validRules);
+          syncLiveGroupAppearances(validRules);
+        }
         if (validSkip) writeSkipDomainsPref(validSkip);
         console.log(`${LOG} imported${validRules ? ` ${validRules.length} rule(s)` : ""}${validSkip ? ` ${validSkip.length} skip-domain(s)` : ""}`);
       } catch (e) {

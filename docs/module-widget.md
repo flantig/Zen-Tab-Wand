@@ -54,6 +54,8 @@ All elements created via `h(tag)` from `config.mjs` (the HTML namespace helper) 
 | Click swatch | Opens `color-picker.mjs` popover for solid/gradient colors. |
 | Click icon button | Opens `emoji-picker.mjs` popover. Pick from the local emoji grid or search by category. |
 
+Rule saves also call `syncLiveGroupAppearances()`, which asks the browser window to re-run `syncAllGroupColors()` so color/gradient/icon changes repaint existing groups immediately.
+
 ## Why a full re-render on each mutation
 
 The data model is small (typically <10 rules, <20 domains total). A full `render()` is faster to reason about than fine-grained DOM diffing and avoids stale event-handler bugs from mutated references. Focus is occasionally lost from inputs during re-render — acceptable trade-off.

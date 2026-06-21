@@ -180,7 +180,7 @@ export const clearGroupColor = (groupEl) => {
  *                      pref toggles like minimal-style should sync everywhere).
  * @returns number — count of groups visited (NOT count of mutated; some visits are no-ops).
  */
-export const syncAllGroupColors = (workspaceId, rules) => {
+export const syncAllGroupColors = (workspaceId, rules, root = document) => {
   const minimal = isMinimalStyle();
   const ruleByName = new Map(rules.map((r) => [r.name, r]));
   const ruleNames = new Set(rules.map((r) => r.name));
@@ -189,7 +189,7 @@ export const syncAllGroupColors = (workspaceId, rules) => {
   const selector = workspaceId
     ? `tab-group:has(tab[zen-workspace-id="${workspaceId}"])`
     : `tab-group`;
-  const groups = document.querySelectorAll(selector);
+  const groups = root.querySelectorAll(selector);
   for (const groupEl of groups) {
     const label = groupEl.getAttribute("label");
     if (!label || !ruleNames.has(label)) continue;
