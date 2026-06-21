@@ -32,7 +32,7 @@
   },
   {
     "type": "dropdown",
-    "label": "Rule matching priority",
+    "label": "Rule matching priority — choose whether URL/domain matches or title matches are checked first",
     "property": "extensions.zen-auto-organize.match-mode",
     "defaultValue": "url-then-title",
     "options": [
