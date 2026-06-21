@@ -11,4 +11,4 @@ Small no-dependency picker used by the rules editor.
 
 ## Storage and rendering
 
-The picker stores either selected emoji text or a `custom:<id>` reference on the rule. It uses `textContent` for emoji buttons and `<img>` for custom icon data URLs; it never parses user text as HTML. Browser-context rendering happens in `groups.mjs`, which writes either text content or a background image custom property for the tab-group label.
+The picker stores either selected emoji text or a `custom:<id>` reference on the rule. Missing custom icon references render as blank. It uses `textContent` for emoji buttons and `<img>` for custom icon data URLs; it never parses user text as HTML. Browser-context rendering happens in `groups.mjs`, which writes either text content or a background image custom property for the tab-group label.

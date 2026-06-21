@@ -772,6 +772,14 @@ export const buildBackupRestoreSection = () => {
             }))
             .filter((icon) => icon.id.startsWith("custom:") && icon.dataUrl.startsWith("data:image/"))
           : null;
+        if (validRules) {
+          const iconIds = new Set((validIcons || readCustomIconsPref()).map((icon) => icon.id));
+          for (const rule of validRules) {
+            if (typeof rule.icon === "string" && rule.icon.startsWith("custom:") && !iconIds.has(rule.icon)) {
+              delete rule.icon;
+            }
+          }
+        }
 
         const current = {
           // Match the widget's view (includes in-progress rules) so the

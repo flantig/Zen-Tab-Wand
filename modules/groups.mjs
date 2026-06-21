@@ -143,13 +143,19 @@ export const applyGroupAppearance = (groupEl, rule) => {
 
     const icon = typeof rule.icon === "string" ? rule.icon.trim() : "";
     if (icon) {
-      groupEl.classList.add("zao-has-icon");
       const custom = findCustomIcon(icon, customIcons);
-      if (custom) {
+      if (icon.startsWith("custom:") && !custom) {
+        groupEl.style.removeProperty("--zao-tab-group-icon");
+        groupEl.style.removeProperty("--zao-tab-group-icon-url");
+        groupEl.classList.remove("zao-has-icon");
+        groupEl.classList.remove("zao-has-custom-icon");
+      } else if (custom) {
+        groupEl.classList.add("zao-has-icon");
         groupEl.style.removeProperty("--zao-tab-group-icon");
         groupEl.style.setProperty("--zao-tab-group-icon-url", `url("${custom.dataUrl.replace(/"/g, '\\"')}")`);
         groupEl.classList.add("zao-has-custom-icon");
       } else {
+        groupEl.classList.add("zao-has-icon");
         groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(icon));
         groupEl.style.removeProperty("--zao-tab-group-icon-url");
         groupEl.classList.remove("zao-has-custom-icon");
@@ -217,13 +223,19 @@ export const syncAllGroupColors = (workspaceId, rules, root = document) => {
         ? ruleByName.get(label).icon.trim()
         : "";
       if (icon) {
-        groupEl.classList.add("zao-has-icon");
         const custom = findCustomIcon(icon, customIcons);
-        if (custom) {
+        if (icon.startsWith("custom:") && !custom) {
+          groupEl.style.removeProperty("--zao-tab-group-icon");
+          groupEl.style.removeProperty("--zao-tab-group-icon-url");
+          groupEl.classList.remove("zao-has-icon");
+          groupEl.classList.remove("zao-has-custom-icon");
+        } else if (custom) {
+          groupEl.classList.add("zao-has-icon");
           groupEl.style.removeProperty("--zao-tab-group-icon");
           groupEl.style.setProperty("--zao-tab-group-icon-url", `url("${custom.dataUrl.replace(/"/g, '\\"')}")`);
           groupEl.classList.add("zao-has-custom-icon");
         } else {
+          groupEl.classList.add("zao-has-icon");
           groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(icon));
           groupEl.style.removeProperty("--zao-tab-group-icon-url");
           groupEl.classList.remove("zao-has-custom-icon");

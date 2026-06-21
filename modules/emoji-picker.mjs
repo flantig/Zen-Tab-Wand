@@ -299,10 +299,9 @@ const matchesQuery = ({ emoji = "", group = "", name = "" }, query) =>
   !query || emoji.includes(query) || group.includes(query) || name.includes(query);
 
 const appendIconNode = (parent, value, customIcons = readCustomIconsPref()) => {
-  const custom = typeof value === "string" && value.startsWith("custom:")
-    ? findCustomIcon(value, customIcons)
-    : null;
-  if (custom) {
+  if (typeof value === "string" && value.startsWith("custom:")) {
+    const custom = findCustomIcon(value, customIcons);
+    if (!custom) return null;
     const img = h("img", { class: "zao-emoji-img" });
     img.src = custom.dataUrl;
     img.alt = "";
@@ -310,7 +309,7 @@ const appendIconNode = (parent, value, customIcons = readCustomIconsPref()) => {
     return custom.name;
   }
   parent.appendChild(h("span", { class: "zao-emoji-glyph", text: value }));
-  return "";
+  return value ? "" : null;
 };
 
 export const updateIconButtonAppearance = (button, icon) => {
@@ -318,10 +317,11 @@ export const updateIconButtonAppearance = (button, icon) => {
   let label = "";
   button.replaceChildren();
   if (value) label = appendIconNode(button, value);
-  else button.textContent = "◇";
-  button.classList.toggle("zao-icon-empty", !value);
-  button.title = value ? `Icon: ${label || value}` : "Pick an icon";
-  button.setAttribute("aria-label", value ? `Change icon ${label || value}` : "Pick an icon");
+  if (!value || label === null) button.textContent = "◇";
+  const hasIcon = Boolean(value && label !== null);
+  button.classList.toggle("zao-icon-empty", !hasIcon);
+  button.title = hasIcon ? `Icon: ${label || value}` : "Pick an icon";
+  button.setAttribute("aria-label", hasIcon ? `Change icon ${label || value}` : "Pick an icon");
 };
 
 export const openEmojiPopover = (rule, anchor, onChange) => {
@@ -381,7 +381,11 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
     current.classList.toggle("zao-emoji-current-empty", !icon);
     current.title = icon ? "Clear icon" : "No icon";
     current.setAttribute("aria-label", icon ? "Clear icon" : "No icon set");
-    if (icon) appendIconNode(current, icon, customIcons);
+    if (icon && appendIconNode(current, icon, customIcons) === null) {
+      current.classList.add("zao-emoji-current-empty");
+      current.title = "No icon";
+      current.setAttribute("aria-label", "No icon set");
+    }
   }
 
   let page = 0;
