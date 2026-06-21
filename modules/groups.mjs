@@ -3,6 +3,7 @@
 // sort-ungrouped-to-top pass.
 
 import { CONFIG, LOG, bgForName, isZenColorName, isValidHex } from "./config.mjs";
+import { findCustomIcon, readCustomIconsPref } from "./custom-icons.mjs";
 import { isMinimalStyle } from "./rules.mjs";
 
 // Find an existing tab-group with the given label in the given workspace.
@@ -124,6 +125,7 @@ const cssColorFor = (color) => {
 
 export const applyGroupAppearance = (groupEl, rule) => {
   if (!groupEl?.isConnected || !rule) return;
+  const customIcons = readCustomIconsPref();
   const solidColor = rule.color || rule.color2;
   if (solidColor) applyGroupColor(groupEl, solidColor);
   else clearGroupColor(groupEl);
@@ -141,11 +143,22 @@ export const applyGroupAppearance = (groupEl, rule) => {
 
     const icon = typeof rule.icon === "string" ? rule.icon.trim() : "";
     if (icon) {
-      groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(icon));
       groupEl.classList.add("zao-has-icon");
+      const custom = findCustomIcon(icon, customIcons);
+      if (custom) {
+        groupEl.style.removeProperty("--zao-tab-group-icon");
+        groupEl.style.setProperty("--zao-tab-group-icon-url", `url("${custom.dataUrl.replace(/"/g, '\\"')}")`);
+        groupEl.classList.add("zao-has-custom-icon");
+      } else {
+        groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(icon));
+        groupEl.style.removeProperty("--zao-tab-group-icon-url");
+        groupEl.classList.remove("zao-has-custom-icon");
+      }
     } else {
       groupEl.style.removeProperty("--zao-tab-group-icon");
+      groupEl.style.removeProperty("--zao-tab-group-icon-url");
       groupEl.classList.remove("zao-has-icon");
+      groupEl.classList.remove("zao-has-custom-icon");
     }
   } catch (e) {
     console.error(`${LOG} applyGroupAppearance failed:`, e);
@@ -164,7 +177,9 @@ export const clearGroupColor = (groupEl) => {
     groupEl.style.removeProperty("--zao-tab-group-gradient");
     groupEl.classList.remove("zao-has-gradient");
     groupEl.style.removeProperty("--zao-tab-group-icon");
+    groupEl.style.removeProperty("--zao-tab-group-icon-url");
     groupEl.classList.remove("zao-has-icon");
+    groupEl.classList.remove("zao-has-custom-icon");
   } catch (e) {
     console.error(`${LOG} clearGroupColor failed:`, e);
   }
@@ -183,6 +198,7 @@ export const clearGroupColor = (groupEl) => {
 export const syncAllGroupColors = (workspaceId, rules, root = document) => {
   const minimal = isMinimalStyle();
   const ruleByName = new Map(rules.map((r) => [r.name, r]));
+  const customIcons = readCustomIconsPref();
   const ruleNames = new Set(rules.map((r) => r.name));
 
   let touched = 0;
@@ -201,11 +217,22 @@ export const syncAllGroupColors = (workspaceId, rules, root = document) => {
         ? ruleByName.get(label).icon.trim()
         : "";
       if (icon) {
-        groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(icon));
         groupEl.classList.add("zao-has-icon");
+        const custom = findCustomIcon(icon, customIcons);
+        if (custom) {
+          groupEl.style.removeProperty("--zao-tab-group-icon");
+          groupEl.style.setProperty("--zao-tab-group-icon-url", `url("${custom.dataUrl.replace(/"/g, '\\"')}")`);
+          groupEl.classList.add("zao-has-custom-icon");
+        } else {
+          groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(icon));
+          groupEl.style.removeProperty("--zao-tab-group-icon-url");
+          groupEl.classList.remove("zao-has-custom-icon");
+        }
       } else {
         groupEl.style.removeProperty("--zao-tab-group-icon");
+        groupEl.style.removeProperty("--zao-tab-group-icon-url");
         groupEl.classList.remove("zao-has-icon");
+        groupEl.classList.remove("zao-has-custom-icon");
       }
     } else {
       groupEl.classList.remove("zao-minimal");

@@ -158,7 +158,7 @@ Inside the settings panel under **Backup & Restore**:
 
 ## Privacy
 
-- Rules, colors, gradients, and icons are saved in your Zen browser prefs. Local only.
+- Rules, colors, gradients, icons, and uploaded custom icon data are saved in your Zen browser prefs. Local only.
 - The Local AI runs entirely on-device using Firefox's bundled model.
 - The Ollama engine talks to `localhost:11434` (or whatever host you configured). Nothing goes to the internet from this mod.
 - The mod fetches `<meta name="description">` snippets from your open tab URLs (to give the AI better context). These fetches use your browser cookies and stay between your browser and the destination site — same as if you'd refreshed the tab.

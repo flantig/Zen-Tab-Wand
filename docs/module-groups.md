@@ -33,7 +33,7 @@ For hex, the setter would write `var(--tab-group-color-#abc)` which is undefined
 
 `color2` is optional. When both `color` and `color2` are valid, `applyGroupAppearance` writes `--zao-tab-group-gradient` and `.zao-has-gradient`; CSS paints the group label with a two-color linear gradient. `color` remains the solid fallback for line/readability variables.
 
-`icon` is optional plain text. It is stored as `--zao-tab-group-icon` and rendered before the visible group label by CSS. Minimal style clears colors/gradients but keeps the icon.
+`icon` is optional. Emoji/text icons are stored as `--zao-tab-group-icon`; uploaded custom icons store a `custom:<id>` reference and render via `--zao-tab-group-icon-url`. Minimal style clears colors/gradients but keeps the icon.
 
 ## Stale group cleanup is destructive
 

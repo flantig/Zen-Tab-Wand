@@ -134,3 +134,4 @@ All prefs use the `extensions.zen-auto-organize.*` prefix (legacy; preserved acr
 - **Minimal style** lives in `extensions.zen-auto-organize.minimal-style`. Observed by `setupMinimalStylePrefObserver` (browser-hooks.mjs) so the style flips live across all workspaces.
 - **AI engine + behaviors** live in `extensions.zen-auto-organize.ai-engine` (`"" | "local" | "ollama"`), `.ai-existing-behavior`, `.ai-new-group-behavior`, `.ai-ollama-host`, `.ai-ollama-model`, `.ai-ollama-warmup`.
 - **Rule appearance** is stored inline on each rule (`{ name, domains, titleTerms, color, color2, icon }`). `color`/`color2` are Zen palette names or hex strings; `icon` is plain text.
+- **Custom icons** live in `extensions.zen-auto-organize.custom-icons-json` as local image data URLs. Rules reference them by `custom:<id>`.

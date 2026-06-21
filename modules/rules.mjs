@@ -27,7 +27,7 @@ const cleanRule = (r) => {
   if (color2) out.color2 = color2;
   if (typeof r?.icon === "string") {
     const icon = r.icon.trim();
-    if (icon) out.icon = icon.slice(0, 12);
+    if (icon) out.icon = icon.startsWith("custom:") ? icon.slice(0, 128) : icon.slice(0, 12);
   }
   return out;
 };

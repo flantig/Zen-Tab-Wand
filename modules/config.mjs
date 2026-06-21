@@ -43,6 +43,7 @@ export const CONFIG = {
 
   RULES_PREF: "extensions.zen-auto-organize.rules-json",
   SKIP_DOMAINS_PREF: "extensions.zen-auto-organize.skip-domains-json",
+  CUSTOM_ICONS_PREF: "extensions.zen-auto-organize.custom-icons-json",
   // Set of tab-group LABELS currently collapsed. JSON-encoded string array.
   // Updated on every collapse-toggle; re-applied on every TabGroupCreate so
   // session restore preserves collapsed/expanded state across browser

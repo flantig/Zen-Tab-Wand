@@ -1,6 +1,7 @@
 // Zen Tab Wand — tiny no-dependency emoji picker for rule icons.
 
 import { CONFIG, h } from "./config.mjs";
+import { findCustomIcon, readCustomIconsPref } from "./custom-icons.mjs";
 
 const EMOJI_SETS = [
   ["Work", "💼", "📌", "📊", "📈", "📉", "🧾", "📝", "📅", "📬", "✅", "⚙️", "🔒", "📋", "📎", "🗂️", "📁", "📇", "📑", "🗓️", "⏰", "⌛", "📣", "🏷️", "🔖", "✉️", "🕒", "📤"],
@@ -285,22 +286,42 @@ const EMOJI_NAMES = new Map([
 
 const ALL_EMOJIS = EMOJI_SETS.flatMap(([groupName, ...items]) =>
   items.map((emoji) => ({
+    id: emoji,
     emoji,
     group: groupName.toLowerCase(),
     name: EMOJI_NAMES.get(emoji) || "",
+    type: "emoji",
   }))
 );
 const PAGE_SIZE = 12;
 
-const matchesQuery = ({ emoji, group, name }, query) =>
+const matchesQuery = ({ emoji = "", group = "", name = "" }, query) =>
   !query || emoji.includes(query) || group.includes(query) || name.includes(query);
+
+const appendIconNode = (parent, value, customIcons = readCustomIconsPref()) => {
+  const custom = typeof value === "string" && value.startsWith("custom:")
+    ? findCustomIcon(value, customIcons)
+    : null;
+  if (custom) {
+    const img = h("img", { class: "zao-emoji-img" });
+    img.src = custom.dataUrl;
+    img.alt = "";
+    parent.appendChild(img);
+    return custom.name;
+  }
+  parent.appendChild(h("span", { class: "zao-emoji-glyph", text: value }));
+  return "";
+};
 
 export const updateIconButtonAppearance = (button, icon) => {
   const value = typeof icon === "string" ? icon.trim() : "";
-  button.textContent = value || "◇";
+  let label = "";
+  button.replaceChildren();
+  if (value) label = appendIconNode(button, value);
+  else button.textContent = "◇";
   button.classList.toggle("zao-icon-empty", !value);
-  button.title = value ? `Icon: ${value}` : "Pick an icon";
-  button.setAttribute("aria-label", value ? `Change icon ${value}` : "Pick an icon");
+  button.title = value ? `Icon: ${label || value}` : "Pick an icon";
+  button.setAttribute("aria-label", value ? `Change icon ${label || value}` : "Pick an icon");
 };
 
 export const openEmojiPopover = (rule, anchor, onChange) => {
@@ -333,8 +354,20 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
   pager.appendChild(next);
   pop.appendChild(pager);
 
+  const customIcons = readCustomIconsPref();
+  const customItems = customIcons.map((icon) => ({
+    id: icon.id,
+    emoji: "",
+    group: "custom",
+    name: icon.name.toLocaleLowerCase(),
+    type: "custom",
+    dataUrl: icon.dataUrl,
+  }));
+  const itemsForPicker = ALL_EMOJIS.concat(customItems);
+
   const commit = (value) => {
-    const icon = String(value || "").trim().slice(0, 12);
+    const raw = String(value || "").trim();
+    const icon = raw.startsWith("custom:") ? raw.slice(0, 128) : raw.slice(0, 12);
     if (icon) rule.icon = icon;
     else delete rule.icon;
     onChange();
@@ -348,13 +381,13 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
     current.classList.toggle("zao-emoji-current-empty", !icon);
     current.title = icon ? "Clear icon" : "No icon";
     current.setAttribute("aria-label", icon ? "Clear icon" : "No icon set");
-    if (icon) current.appendChild(h("span", { class: "zao-emoji-glyph", text: icon }));
+    if (icon) appendIconNode(current, icon, customIcons);
   }
 
   let page = 0;
   const filteredItems = () => {
     const query = search.value.trim().toLocaleLowerCase();
-    return ALL_EMOJIS.filter((entry) => matchesQuery(entry, query));
+    return itemsForPicker.filter((entry) => matchesQuery(entry, query));
   };
 
   const renderGrid = () => {
@@ -367,11 +400,18 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
       const btn = h("button", { class: "zao-emoji-choice" });
       btn.type = "button";
       btn.title = item.name || item.group;
-      btn.setAttribute("aria-label", item.name ? `${item.emoji} ${item.name}` : item.emoji);
-      btn.appendChild(h("span", { class: "zao-emoji-glyph", text: item.emoji }));
+      btn.setAttribute("aria-label", item.name ? `${item.id} ${item.name}` : item.id);
+      if (item.type === "custom") {
+        const img = h("img", { class: "zao-emoji-img" });
+        img.src = item.dataUrl;
+        img.alt = "";
+        btn.appendChild(img);
+      } else {
+        btn.appendChild(h("span", { class: "zao-emoji-glyph", text: item.emoji }));
+      }
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
-        commit(item.emoji);
+        commit(item.id);
         pop.remove();
         cleanup();
       });

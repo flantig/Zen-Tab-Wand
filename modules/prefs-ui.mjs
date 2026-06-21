@@ -8,6 +8,7 @@ import { readRulesPref, writeRulesPref, getAIEngine } from "./rules.mjs";
 import {
   buildRulesEditor,
   buildSkipDomainsEditor,
+  buildCustomIconsEditor,
   buildBackupRestoreSection,
   teardownRulesPrefObserver,
   teardownSkipPrefObserver,
@@ -432,6 +433,7 @@ const performInject = (dialog) => {
 
   const rulesEditor = buildRulesEditor(initial);
   const skipEditor = buildSkipDomainsEditor();
+  const customIconsEditor = buildCustomIconsEditor();
   const backupSection = buildBackupRestoreSection();
 
   // Each section's content lives as a sibling immediately after its Sine
@@ -441,6 +443,7 @@ const performInject = (dialog) => {
   // when not found).
   insertAfter(content, rulesEditor, findSeparatorContainer(dialog, "Group Rules"));
   insertAfter(content, skipEditor, findSeparatorContainer(dialog, "Skip Domains"));
+  insertAfter(content, customIconsEditor, findSeparatorContainer(dialog, "Look & Feel"));
   insertAfter(content, backupSection, findSeparatorContainer(dialog, "Backup & Restore"));
 
   tagSeparatorContainers(dialog);

@@ -53,6 +53,7 @@ See [architecture.md](architecture.md) for the full picture; the short version:
 - [module-prefs-ui.md](module-prefs-ui.md) — Sine dialog detection, widget injection, conditional fields
 - [module-widget.md](module-widget.md) — rules editor table + Backup & Restore
 - [module-color-picker.md](module-color-picker.md) — color popover + palette fetch
+- [module-custom-icons.md](module-custom-icons.md) — local uploaded icon storage
 - [module-emoji-picker.md](module-emoji-picker.md) — local emoji/icon picker
 
 Modules without dedicated docs (small / self-explanatory — see source comments):

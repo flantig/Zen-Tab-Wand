@@ -14,6 +14,7 @@ import {
   updateIconButtonAppearance,
 } from "./emoji-picker.mjs";
 import { syncAllGroupColors } from "./groups.mjs";
+import { makeCustomIcon, readCustomIconsPref, writeCustomIconsPref } from "./custom-icons.mjs";
 
 let rulesPrefObserver = null;
 
@@ -528,12 +529,96 @@ export const teardownSkipPrefObserver = () => {
   skipPrefObserver = null;
 };
 
+export const buildCustomIconsEditor = () => {
+  let icons = readCustomIconsPref();
+  const container = h("div", { class: "zao-custom-icons-editor" });
+  const bar = h("div", { class: "zao-custom-icons-bar" });
+  const upload = h("button", { class: "zao-backup-btn", text: "Upload icons..." });
+  upload.type = "button";
+  const grid = h("div", { class: "zao-custom-icons-grid" });
+
+  const persistIcons = () => writeCustomIconsPref(icons);
+  const clearDeletedIconFromRules = (id) => {
+    const rules = readRulesPref({ keepIncomplete: true }) || [];
+    let changed = false;
+    for (const rule of rules) {
+      if (rule.icon === id) {
+        delete rule.icon;
+        changed = true;
+      }
+    }
+    if (changed) {
+      writeRulesPref(rules);
+      syncLiveGroupAppearances(rules);
+    }
+  };
+
+  const render = () => {
+    grid.replaceChildren();
+    for (const icon of icons) {
+      const btn = h("button", { class: "zao-custom-icon-choice" });
+      btn.type = "button";
+      btn.title = `Remove ${icon.name}`;
+      btn.setAttribute("aria-label", `Remove ${icon.name}`);
+      const img = h("img", { class: "zao-emoji-img" });
+      img.src = icon.dataUrl;
+      img.alt = "";
+      btn.appendChild(img);
+      btn.addEventListener("click", () => {
+        icons = icons.filter((item) => item.id !== icon.id);
+        persistIcons();
+        clearDeletedIconFromRules(icon.id);
+        render();
+      });
+      grid.appendChild(btn);
+    }
+    if (!icons.length) {
+      grid.appendChild(h("div", { class: "zao-custom-icons-empty", text: "No custom icons" }));
+    }
+  };
+
+  upload.addEventListener("click", () => {
+    const picker = h("input");
+    picker.type = "file";
+    picker.accept = "image/png,image/jpeg,image/webp,image/gif,image/svg+xml";
+    picker.multiple = true;
+    picker.addEventListener("change", async () => {
+      const files = Array.from(picker.files || []);
+      for (const file of files) {
+        if (!file.type.startsWith("image/")) continue;
+        if (file.size > 256 * 1024) {
+          alert(`${file.name} is too large. Please use an icon under 256 KB.`);
+          continue;
+        }
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(reader.error || new Error("Read failed"));
+          reader.readAsDataURL(file);
+        });
+        icons.push(makeCustomIcon(file, dataUrl));
+      }
+      persistIcons();
+      render();
+      picker.remove();
+    });
+    document.documentElement.appendChild(picker);
+    picker.click();
+  });
+
+  bar.appendChild(upload);
+  container.appendChild(bar);
+  container.appendChild(grid);
+  render();
+  return container;
+};
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Backup & Restore — just the Export / Import buttons. The section header and
 // description come from Sine's native separator (declared in preferences.json)
 // and our SECTION_DESCRIPTIONS list (injected by prefs-ui.mjs).
 //
-// Export shape (v1):  { "rules": [...], "skipDomains": [...] }
+// Export shape (v1):  { "rules": [...], "skipDomains": [...], "customIcons": [...] }
 // Import accepts:
 //   • that object shape (overwrites both prefs)
 //   • a bare array (treated as rules-only, for backwards compat with v0 exports)
@@ -551,6 +636,7 @@ export const buildBackupRestoreSection = () => {
       // the backup — otherwise restoring would silently drop them.
       rules: readRulesPref({ keepIncomplete: true }) || [],
       skipDomains: readSkipDomainsPref() || [],
+      customIcons: readCustomIconsPref(),
     };
     const json = JSON.stringify(payload, null, 2);
     // Filename: wand-backup-<N>groups-YYYYMMDD-HHmmss.json — encodes which
@@ -639,16 +725,18 @@ export const buildBackupRestoreSection = () => {
         const parsed = JSON.parse(text);
         let importedRules = null;
         let importedSkip = null;
+        let importedIcons = null;
         if (Array.isArray(parsed)) {
           // Legacy v0 format — array of rules only.
           importedRules = parsed;
         } else if (parsed && typeof parsed === "object") {
           if (Array.isArray(parsed.rules)) importedRules = parsed.rules;
           if (Array.isArray(parsed.skipDomains)) importedSkip = parsed.skipDomains;
+          if (Array.isArray(parsed.customIcons)) importedIcons = parsed.customIcons;
         } else {
           throw new Error("Top-level must be an array or { rules, skipDomains } object");
         }
-        if (!importedRules && !importedSkip) throw new Error("Nothing to import (no rules or skipDomains found)");
+        if (!importedRules && !importedSkip && !importedIcons) throw new Error("Nothing to import (no rules, skipDomains, or customIcons found)");
 
         let validRules = null;
         if (importedRules) {
@@ -675,6 +763,15 @@ export const buildBackupRestoreSection = () => {
         if (importedSkip) {
           validSkip = importedSkip.map((d) => String(d).trim()).filter(Boolean);
         }
+        const validIcons = importedIcons
+          ? importedIcons
+            .map((icon) => ({
+              id: typeof icon?.id === "string" ? icon.id.trim() : "",
+              name: typeof icon?.name === "string" ? icon.name.trim() : "",
+              dataUrl: typeof icon?.dataUrl === "string" ? icon.dataUrl.trim() : "",
+            }))
+            .filter((icon) => icon.id.startsWith("custom:") && icon.dataUrl.startsWith("data:image/"))
+          : null;
 
         const current = {
           // Match the widget's view (includes in-progress rules) so the
@@ -682,17 +779,18 @@ export const buildBackupRestoreSection = () => {
           // the editor, not the filtered wand-click count.
           rules: (readRulesPref({ keepIncomplete: true }) || []).length,
           skip: (readSkipDomainsPref() || []).length,
+          icons: readCustomIconsPref().length,
         };
         const summaryLines = [];
         if (validRules) summaryLines.push(`Rules:  ${current.rules} → ${validRules.length}`);
         if (validSkip) summaryLines.push(`Skip:   ${current.skip} → ${validSkip.length}`);
+        if (validIcons) summaryLines.push(`Icons:  ${current.icons} → ${validIcons.length}`);
         if (!window.confirm(`Replace your settings?\n\n${summaryLines.join("\n")}`)) return;
-        if (validRules) {
-          writeRulesPref(validRules);
-          syncLiveGroupAppearances(validRules);
-        }
+        if (validIcons) writeCustomIconsPref(validIcons);
+        if (validRules) writeRulesPref(validRules);
         if (validSkip) writeSkipDomainsPref(validSkip);
-        console.log(`${LOG} imported${validRules ? ` ${validRules.length} rule(s)` : ""}${validSkip ? ` ${validSkip.length} skip-domain(s)` : ""}`);
+        if (validRules) syncLiveGroupAppearances(validRules);
+        console.log(`${LOG} imported${validRules ? ` ${validRules.length} rule(s)` : ""}${validSkip ? ` ${validSkip.length} skip-domain(s)` : ""}${validIcons ? ` ${validIcons.length} custom icon(s)` : ""}`);
       } catch (e) {
         console.error(`${LOG} import failed:`, e);
         alert(`Import failed: ${e.message}`);

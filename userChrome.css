@@ -46,6 +46,16 @@ tab-group.zao-has-icon .tab-group-label::before {
   transform: translateY(-0.12em);
 }
 
+tab-group.zao-has-custom-icon .tab-group-label::before {
+  content: "";
+  width: 1.15em;
+  height: 1.15em;
+  background-image: var(--zao-tab-group-icon-url);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
 /* --- Toolbar button: wiggle the wand on click --- */
 @keyframes zao-wand-wiggle {
   0%   { transform: rotate(0deg); }
@@ -511,6 +521,7 @@ tab-group.zao-has-icon .tab-group-label::before {
 
 .zao-icon-button {
   appearance: none;
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -526,6 +537,10 @@ tab-group.zao-has-icon .tab-group-label::before {
   padding: 0;
   font-size: 14px;
   line-height: 1;
+}
+.zao-icon-button .zao-emoji-img {
+  width: 16px;
+  height: 16px;
 }
 .zao-icon-empty {
   opacity: 0.55;
@@ -646,6 +661,16 @@ tab-group.zao-has-icon .tab-group-label::before {
   transform: translate(-50%, -50%);
   unicode-bidi: isolate;
 }
+.zao-emoji-img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+}
 .zao-emoji-choice:hover,
 .zao-emoji-choice:focus {
   background: color-mix(in srgb, currentColor 10%, transparent);
@@ -678,6 +703,58 @@ tab-group.zao-has-icon .tab-group-label::before {
 .zao-emoji-action:disabled {
   cursor: default;
   opacity: 0.45;
+}
+
+.zao-custom-icons-editor {
+  padding: 8px 12px;
+}
+.zao-custom-icons-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.zao-custom-icons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 40px);
+  gap: 5px;
+  align-items: center;
+}
+.zao-custom-icon-choice {
+  appearance: none;
+  position: relative;
+  box-sizing: border-box;
+  width: 40px;
+  height: 34px;
+  min-width: 40px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.zao-custom-icon-choice::after {
+  content: "×";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: color-mix(in srgb, Canvas 72%, transparent);
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0;
+}
+.zao-custom-icon-choice:hover::after,
+.zao-custom-icon-choice:focus::after {
+  opacity: 1;
+}
+.zao-custom-icons-empty {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  opacity: 0.7;
 }
 
 /* ─── Identify-only preview modal (Phase 4d) ──────────────────────────────── */
