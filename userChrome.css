@@ -549,19 +549,20 @@ tab-group.zao-has-icon .tab-group-label::before {
 }
 .zao-emoji-search-row {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  gap: 6px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 5px;
   align-items: center;
 }
 .zao-emoji-current {
   appearance: none;
   position: relative;
   box-sizing: border-box;
-  width: 32px;
-  height: 32px;
-  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  width: 40px;
+  height: 34px;
+  min-width: 40px;
+  border: 1px solid transparent;
   border-radius: 5px;
-  background: color-mix(in srgb, currentColor 6%, transparent);
+  background: transparent;
   color: inherit;
   cursor: pointer;
   padding: 0;
@@ -585,6 +586,7 @@ tab-group.zao-has-icon .tab-group-label::before {
 }
 .zao-emoji-current-empty {
   cursor: default;
+  border-color: color-mix(in srgb, currentColor 22%, transparent);
   border-style: dashed;
   background: transparent;
 }
