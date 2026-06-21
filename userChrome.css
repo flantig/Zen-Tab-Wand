@@ -539,8 +539,8 @@ tab-group.zao-has-icon .tab-group-label::before {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  width: 224px;
-  padding: 10px;
+  width: 188px;
+  padding: 8px;
   background: Canvas;
   color: CanvasText;
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
