@@ -13,6 +13,7 @@ const EMOJI_SETS = [
 const ALL_EMOJIS = EMOJI_SETS.flatMap(([name, ...items]) =>
   items.map((emoji) => ({ emoji, group: name.toLowerCase() }))
 );
+const PAGE_SIZE = 12;
 
 const matchesQuery = ({ emoji, group }, query) =>
   !query || emoji.includes(query) || group.includes(query);
@@ -39,6 +40,17 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
   const grid = h("div", { class: "zao-emoji-grid" });
   pop.appendChild(grid);
 
+  const pager = h("div", { class: "zao-emoji-pager" });
+  const prev = h("button", { class: "zao-emoji-action", text: "Prev" });
+  prev.type = "button";
+  const pageLabel = h("span", { class: "zao-emoji-page" });
+  const next = h("button", { class: "zao-emoji-action", text: "Next" });
+  next.type = "button";
+  pager.appendChild(prev);
+  pager.appendChild(pageLabel);
+  pager.appendChild(next);
+  pop.appendChild(pager);
+
   const actions = h("div", { class: "zao-emoji-actions" });
   const clear = h("button", { class: "zao-emoji-action", text: "Clear" });
   clear.type = "button";
@@ -56,10 +68,19 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
     updateIconButtonAppearance(anchor, rule.icon);
   };
 
-  const renderGrid = () => {
+  let page = 0;
+  const filteredItems = () => {
     const query = search.value.trim().toLocaleLowerCase();
+    return ALL_EMOJIS.filter((entry) => matchesQuery(entry, query));
+  };
+
+  const renderGrid = () => {
+    const items = filteredItems();
+    const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    page = Math.min(page, pageCount - 1);
+    const start = page * PAGE_SIZE;
     grid.replaceChildren();
-    for (const item of ALL_EMOJIS.filter((entry) => matchesQuery(entry, query))) {
+    for (const item of items.slice(start, start + PAGE_SIZE)) {
       const btn = h("button", { class: "zao-emoji-choice", text: item.emoji });
       btn.type = "button";
       btn.title = item.group;
@@ -71,8 +92,22 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
       });
       grid.appendChild(btn);
     }
+    pageLabel.textContent = `${page + 1}/${pageCount}`;
+    prev.disabled = page === 0;
+    next.disabled = page >= pageCount - 1;
+    pager.hidden = items.length <= PAGE_SIZE;
   };
 
+  prev.addEventListener("click", (e) => {
+    e.stopPropagation();
+    page = Math.max(0, page - 1);
+    renderGrid();
+  });
+  next.addEventListener("click", (e) => {
+    e.stopPropagation();
+    page += 1;
+    renderGrid();
+  });
   clear.addEventListener("click", (e) => {
     e.stopPropagation();
     commit("");
@@ -85,7 +120,10 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
     pop.remove();
     cleanup();
   });
-  search.addEventListener("input", renderGrid);
+  search.addEventListener("input", () => {
+    page = 0;
+    renderGrid();
+  });
   search.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();

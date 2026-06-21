@@ -37,7 +37,8 @@ tab-group.zao-has-icon .tab-group-label::before {
   margin-inline-end: 0.35em;
   font-size: 1.25em;
   line-height: 1;
-  vertical-align: -0.08em;
+  vertical-align: middle;
+  transform: translateY(-0.06em);
 }
 
 /* --- Toolbar button: wiggle the wand on click --- */
@@ -532,7 +533,7 @@ tab-group.zao-has-icon .tab-group-label::before {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 230px;
+  width: 176px;
   padding: 9px;
   background: Canvas;
   color: CanvasText;
@@ -555,15 +556,14 @@ tab-group.zao-has-icon .tab-group-label::before {
 }
 .zao-emoji-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
-  max-height: 160px;
-  overflow: auto;
+  overflow: hidden;
 }
 .zao-emoji-choice {
   appearance: none;
-  width: 30px;
-  height: 30px;
+  width: 100%;
+  height: 34px;
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
@@ -584,6 +584,18 @@ tab-group.zao-has-icon .tab-group-label::before {
   justify-content: flex-end;
   gap: 6px;
 }
+.zao-emoji-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.zao-emoji-page {
+  min-width: 36px;
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.75;
+}
 .zao-emoji-action {
   appearance: none;
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
@@ -593,6 +605,10 @@ tab-group.zao-has-icon .tab-group-label::before {
   cursor: pointer;
   font-size: 12px;
   padding: 4px 8px;
+}
+.zao-emoji-action:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 /* ─── Identify-only preview modal (Phase 4d) ──────────────────────────────── */

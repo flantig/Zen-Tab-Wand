@@ -7,7 +7,7 @@ Small no-dependency picker used by the rules editor.
 | Name | Notes |
 |---|---|
 | `updateIconButtonAppearance(button, icon)` | Updates the row icon button text, empty state, title, and accessible label. |
-| `openEmojiPopover(rule, anchor, onChange)` | Opens a popover with search, a categorized local emoji grid, Clear, and Use text. Stores `rule.icon` as plain text and calls `onChange()` after edits. |
+| `openEmojiPopover(rule, anchor, onChange)` | Opens a popover with search, a two-column paged local emoji grid, Clear, and Use text. Stores `rule.icon` as plain text and calls `onChange()` after edits. |
 
 ## Storage and rendering
 
