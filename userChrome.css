@@ -611,7 +611,7 @@ tab-group.zao-has-icon .tab-group-label::before {
 }
 .zao-emoji-grid {
   display: grid;
-  grid-template-columns: repeat(3, 40px);
+  grid-template-columns: repeat(4, 40px);
   justify-content: center;
   gap: 5px;
   direction: ltr;

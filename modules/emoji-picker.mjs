@@ -13,7 +13,7 @@ const EMOJI_SETS = [
   ["Status", "✅", "☑️", "✔️", "❌", "⚠️", "🚫", "⛔", "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚪", "⚫", "⬆️", "⬇️", "➡️", "⬅️", "🔺", "🔻", "🔸", "🔹", "🟩", "🟥", "🟦", "⬜"],
   ["Places", "🌐", "🏢", "🏛️", "🏫", "🏥", "🏭", "🏗️", "🏪", "🏬", "🏡", "⛰️", "🌆", "🌃", "🛣️", "🛤️", "🛫", "🛬", "🚢", "🏙️", "🏕️", "🏖️", "🏟️", "🗽", "🕌", "⛩️", "🛎️", "🚏"],
   ["Tools", "🔧", "🔨", "🪛", "🧰", "🧲", "🧯", "🔦", "🔑", "🗝️", "🪜", "⚖️", "🧷", "✂️", "📏", "📐", "🖊️", "✏️", "🖍️", "🧽", "🪣", "🧴", "🪒", "🪄", "🔩", "⚙️", "🧪", "🧬"],
-  ["Symbols", "⭐", "🌟", "✨", "💫", "🔥", "💎", "🎲", "🎯", "🧭", "🧿", "♻️", "🔁", "🔄", "➕", "➖", "➗", "✳️", "❇️", "💠", "🔷", "🔶", "🔰", "〽️", "⚜️", "🔱", "🌀", "💤"],
+  ["Symbols", "⭐", "🌟", "✨", "💫", "🔥", "💎", "🎲", "🎯", "🧭", "🧿", "♻️", "🔁", "🔄", "➕", "➖", "➗", "✳️", "❇️", "💠", "🔷", "🔶", "🔰", "〽️", "⚜️", "🔱", "🌀", "💤", "🧶", "🪩", "🗜️"],
 ];
 
 const EMOJI_NAMES = new Map([
@@ -278,6 +278,9 @@ const EMOJI_NAMES = new Map([
   ["⚜️", "fleur de lis"],
   ["🔱", "trident emblem"],
   ["💤", "sleeping symbol"],
+  ["🧶", "ball of yarn"],
+  ["🪩", "mirror ball"],
+  ["🗜️", "compression"],
 ]);
 
 const ALL_EMOJIS = EMOJI_SETS.flatMap(([groupName, ...items]) =>
@@ -287,7 +290,7 @@ const ALL_EMOJIS = EMOJI_SETS.flatMap(([groupName, ...items]) =>
     name: EMOJI_NAMES.get(emoji) || "",
   }))
 );
-const PAGE_SIZE = 9;
+const PAGE_SIZE = 12;
 
 const matchesQuery = ({ emoji, group, name }, query) =>
   !query || emoji.includes(query) || group.includes(query) || name.includes(query);
