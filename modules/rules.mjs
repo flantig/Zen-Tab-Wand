@@ -45,7 +45,7 @@ const isRunnableRule = (r) =>
  *
  * Each Rule has shape:
  * `{ name: string, domains: string[], titleTerms?: string[], color?: string, color2?: string, icon?: string }`.
- * Color is preserved if it's either a Zen palette name (e.g. "blue") or a hex (`#abc`).
+ * Color fields are preserved if they're either Zen palette names (e.g. "blue") or hex (`#abc`).
  *
  * Malformed entries are silently dropped — invalid rules don't break valid ones.
  */

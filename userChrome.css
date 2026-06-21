@@ -27,6 +27,19 @@ tab-group.zao-minimal {
   --tab-group-line-color: color-mix(in srgb, currentColor 18%, transparent) !important;
 }
 
+tab-group.zao-has-gradient .tab-group-label {
+  background: var(--zao-tab-group-gradient, var(--tab-group-color)) !important;
+}
+
+tab-group.zao-has-icon .tab-group-label::before {
+  content: var(--zao-tab-group-icon);
+  display: inline-block;
+  margin-inline-end: 0.35em;
+  font-size: 1.25em;
+  line-height: 1;
+  vertical-align: -0.08em;
+}
+
 /* --- Toolbar button: wiggle the wand on click --- */
 @keyframes zao-wand-wiggle {
   0%   { transform: rotate(0deg); }
@@ -93,8 +106,8 @@ tab-group.zao-minimal {
 .zao-row,
 .zao-add-row {
   display: grid;
-  /* grip | color | category | domains | remove */
-  grid-template-columns: 20px 28px 180px 1fr 28px;
+  /* grip | color/icon | category | domains | remove */
+  grid-template-columns: 20px 52px 180px 1fr 28px;
   gap: 10px;
   padding: 8px 12px;
   align-items: center;
@@ -397,6 +410,7 @@ tab-group.zao-minimal {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   position: relative;
 }
 
@@ -436,6 +450,12 @@ tab-group.zao-minimal {
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   border-radius: 8px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.zao-color-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .zao-presets {
@@ -481,6 +501,98 @@ tab-group.zao-minimal {
 }
 .zao-color-hex:focus {
   border-color: color-mix(in srgb, currentColor 50%, transparent);
+}
+
+.zao-icon-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+.zao-icon-empty {
+  opacity: 0.55;
+  font-size: 12px;
+}
+
+.zao-emoji-popover {
+  position: fixed;
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 230px;
+  padding: 9px;
+  background: Canvas;
+  color: CanvasText;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+.zao-emoji-search {
+  appearance: none;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 5px;
+  color: inherit;
+  font-size: 12px;
+  padding: 5px 7px;
+  outline: none;
+}
+.zao-emoji-search:focus {
+  border-color: color-mix(in srgb, currentColor 50%, transparent);
+}
+.zao-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  max-height: 160px;
+  overflow: auto;
+}
+.zao-emoji-choice {
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+.zao-emoji-choice:hover,
+.zao-emoji-choice:focus {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  border-color: color-mix(in srgb, currentColor 20%, transparent);
+  outline: none;
+}
+.zao-emoji-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.zao-emoji-action {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
 }
 
 /* ─── Identify-only preview modal (Phase 4d) ──────────────────────────────── */

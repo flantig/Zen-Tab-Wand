@@ -9,6 +9,7 @@ Everything that pokes at `<tab-group>` elements: lookup, color application, diss
 | `findExistingGroup(name, workspaceId)` | Returns the group element or null. Tries the direct attribute selector first, falls back to label-only + child-tab verification. |
 | `expandIfCollapsed(groupEl)` | If `[collapsed=true]`, flip to expanded. We rely on this before moving tabs in. |
 | `applyGroupColor(groupEl, color)` | Two paths: named Zen color → `group.color = name` (Zen's setter wires up light/dark variants). Hex → override `--tab-group-color*` custom properties with derived `invert` and `pale` so collapsed state stays readable. |
+| `applyGroupAppearance(groupEl, rule)` | Applies the rule's solid color, optional `color2` gradient, and optional icon custom property/class. |
 | `clearGroupColor(groupEl)` | Strips our inline overrides. |
 | `syncAllGroupColors(workspaceId, rules)` | Walks every rule-matched group in the workspace and either applies its rule color or toggles `.zao-minimal` (when minimal-style pref is on). |
 | `moveUngroupedToTop(workspaceId)` | Pushes any remaining ungrouped tab to the top of the workspace's `tabsContainer`, preserving relative DOM order. |
@@ -27,6 +28,12 @@ Zen's tab-group has a native `color` JS property setter that writes:
 So `group.color = "blue"` cascades correctly through Zen's light/dark variant system. We use this path for any color stored as a Zen palette name.
 
 For hex, the setter would write `var(--tab-group-color-#abc)` which is undefined → no effect. We bypass the setter and override the three CSS custom properties directly with the hex (and lighter `color-mix` variants for `invert`/`pale`).
+
+## Gradients and icons
+
+`color2` is optional. When both `color` and `color2` are valid, `applyGroupAppearance` writes `--zao-tab-group-gradient` and `.zao-has-gradient`; CSS paints the group label with a two-color linear gradient. `color` remains the solid fallback for line/readability variables.
+
+`icon` is optional plain text. It is stored as `--zao-tab-group-icon` and rendered before the visible group label by CSS. Minimal style clears colors/gradients but keeps the icon.
 
 ## Stale group cleanup is destructive
 

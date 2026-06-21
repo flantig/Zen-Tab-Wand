@@ -2,7 +2,7 @@
 // color application (named via Zen API; hex via CSS variable overrides), and the
 // sort-ungrouped-to-top pass.
 
-import { CONFIG, LOG, isZenColorName, isValidHex } from "./config.mjs";
+import { CONFIG, LOG, bgForName, isZenColorName, isValidHex } from "./config.mjs";
 import { isMinimalStyle } from "./rules.mjs";
 
 // Find an existing tab-group with the given label in the given workspace.
@@ -116,6 +116,42 @@ export const applyGroupColor = (groupEl, color) => {
   }
 };
 
+const cssColorFor = (color) => {
+  if (isZenColorName(color)) return bgForName(color);
+  if (isValidHex(color)) return color;
+  return "";
+};
+
+export const applyGroupAppearance = (groupEl, rule) => {
+  if (!groupEl?.isConnected || !rule) return;
+  const solidColor = rule.color || rule.color2;
+  if (solidColor) applyGroupColor(groupEl, solidColor);
+  else clearGroupColor(groupEl);
+
+  try {
+    const color1 = cssColorFor(rule.color);
+    const color2 = cssColorFor(rule.color2);
+    if (color1 && color2) {
+      groupEl.style.setProperty("--zao-tab-group-gradient", `linear-gradient(90deg, ${color1}, ${color2})`);
+      groupEl.classList.add("zao-has-gradient");
+    } else {
+      groupEl.style.removeProperty("--zao-tab-group-gradient");
+      groupEl.classList.remove("zao-has-gradient");
+    }
+
+    const icon = typeof rule.icon === "string" ? rule.icon.trim() : "";
+    if (icon) {
+      groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(icon));
+      groupEl.classList.add("zao-has-icon");
+    } else {
+      groupEl.style.removeProperty("--zao-tab-group-icon");
+      groupEl.classList.remove("zao-has-icon");
+    }
+  } catch (e) {
+    console.error(`${LOG} applyGroupAppearance failed:`, e);
+  }
+};
+
 // Strip our custom color overrides (used when minimal style is on, or when a rule's
 // color is cleared).
 export const clearGroupColor = (groupEl) => {
@@ -125,6 +161,10 @@ export const clearGroupColor = (groupEl) => {
     groupEl.style.removeProperty("--tab-group-color-invert");
     groupEl.style.removeProperty("--tab-group-color-pale");
     groupEl.style.removeProperty("--tab-group-line-color");
+    groupEl.style.removeProperty("--zao-tab-group-gradient");
+    groupEl.classList.remove("zao-has-gradient");
+    groupEl.style.removeProperty("--zao-tab-group-icon");
+    groupEl.classList.remove("zao-has-icon");
   } catch (e) {
     console.error(`${LOG} clearGroupColor failed:`, e);
   }
@@ -142,7 +182,7 @@ export const clearGroupColor = (groupEl) => {
  */
 export const syncAllGroupColors = (workspaceId, rules) => {
   const minimal = isMinimalStyle();
-  const colorByName = new Map(rules.filter((r) => r.color).map((r) => [r.name, r.color]));
+  const ruleByName = new Map(rules.map((r) => [r.name, r]));
   const ruleNames = new Set(rules.map((r) => r.name));
 
   let touched = 0;
@@ -157,9 +197,19 @@ export const syncAllGroupColors = (workspaceId, rules) => {
     if (minimal) {
       groupEl.classList.add("zao-minimal");
       clearGroupColor(groupEl);
+      const icon = typeof ruleByName.get(label)?.icon === "string"
+        ? ruleByName.get(label).icon.trim()
+        : "";
+      if (icon) {
+        groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(icon));
+        groupEl.classList.add("zao-has-icon");
+      } else {
+        groupEl.style.removeProperty("--zao-tab-group-icon");
+        groupEl.classList.remove("zao-has-icon");
+      }
     } else {
       groupEl.classList.remove("zao-minimal");
-      if (colorByName.has(label)) applyGroupColor(groupEl, colorByName.get(label));
+      if (ruleByName.has(label)) applyGroupAppearance(groupEl, ruleByName.get(label));
       else clearGroupColor(groupEl);
     }
     touched++;

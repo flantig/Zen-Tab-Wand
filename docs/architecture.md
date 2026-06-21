@@ -40,7 +40,8 @@ The same `auto-organize.uc.mjs` is loaded into two different documents by Sine:
             ├── injectStylesheet()         ──▶ prefs-ui.mjs (internal)
             └── performInject()            ──▶ prefs-ui.mjs (internal)
                   ├── buildRulesEditor()        ──▶ widget.mjs
-                  │     └── openColorPopover()       ──▶ color-picker.mjs
+                  │     ├── openColorPopover()       ──▶ color-picker.mjs
+                  │     └── openEmojiPopover()       ──▶ emoji-picker.mjs
                   ├── buildBackupRestoreSection() ──▶ widget.mjs
                   ├── tagSeparatorContainers()
                   ├── injectSectionDescriptions()
@@ -87,7 +88,7 @@ browser-ui.mjs    browser-hooks.mjs   (browser context)
                  │
    ┌─────────────┴──────────┐
    │                        │
-prefs-ui.mjs ─── widget.mjs ─── color-picker.mjs   (prefs context)
+prefs-ui.mjs ─── widget.mjs ─── color-picker.mjs / emoji-picker.mjs   (prefs context)
 ```
 
 ## The tidy-button click flow
@@ -132,4 +133,4 @@ All prefs use the `extensions.zen-auto-organize.*` prefix (legacy; preserved acr
 - **Rule matching priority** lives in `extensions.zen-auto-organize.match-mode` (`"url-only" | "title-only" | "url-then-title" | "title-then-url"`, default `"url-then-title"`).
 - **Minimal style** lives in `extensions.zen-auto-organize.minimal-style`. Observed by `setupMinimalStylePrefObserver` (browser-hooks.mjs) so the style flips live across all workspaces.
 - **AI engine + behaviors** live in `extensions.zen-auto-organize.ai-engine` (`"" | "local" | "ollama"`), `.ai-existing-behavior`, `.ai-new-group-behavior`, `.ai-ollama-host`, `.ai-ollama-model`, `.ai-ollama-warmup`.
-- **Rule colors** are stored inline on each rule (`{ name, domains, titleTerms, color }`). The color is either a Zen palette name (`"blue"`) or a hex string (`"#abc"`).
+- **Rule appearance** is stored inline on each rule (`{ name, domains, titleTerms, color, color2, icon }`). `color`/`color2` are Zen palette names or hex strings; `icon` is plain text.

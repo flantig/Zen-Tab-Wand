@@ -1,5 +1,5 @@
 // Zen Tab Wand — settings rules editor widget.
-// Builds the pill table (Category | Domains) with +/- buttons, color swatch per row,
+// Builds the pill table (Category | Matches) with +/- buttons, color/icon controls per row,
 // hex input, and live persistence to the rules pref. Also wires a pref observer so
 // external changes (right-click "Add to Rule…" submenu, AI Pass 2, Import) refresh the table in real time.
 
@@ -9,6 +9,10 @@ import {
   openColorPopover,
   updateSwatchAppearance,
 } from "./color-picker.mjs";
+import {
+  openEmojiPopover,
+  updateIconButtonAppearance,
+} from "./emoji-picker.mjs";
 
 let rulesPrefObserver = null;
 
@@ -114,7 +118,7 @@ export const buildRulesEditor = (rules) => {
     swatch.className = "zao-swatch";
     swatch.setAttribute("role", "button");
     swatch.setAttribute("tabindex", "0");
-    updateSwatchAppearance(swatch, rule.color);
+    updateSwatchAppearance(swatch, rule.color, rule.color2);
     const open = (e) => {
       e.stopPropagation();
       openColorPopover(rule, swatch, persist);
@@ -124,6 +128,16 @@ export const buildRulesEditor = (rules) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(e); }
     });
     cell.appendChild(swatch);
+
+    const icon = h("button");
+    icon.type = "button";
+    icon.className = "zao-icon-button";
+    updateIconButtonAppearance(icon, rule.icon);
+    icon.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openEmojiPopover(rule, icon, persist);
+    });
+    cell.appendChild(icon);
     return cell;
   };
 
@@ -289,7 +303,7 @@ export const buildRulesEditor = (rules) => {
     const header = h("div");
     header.className = "zao-header";
     header.appendChild(h("div")); // grip column (no label)
-    header.appendChild(h("div")); // color column (no label)
+    header.appendChild(h("div")); // color/icon column (no label)
     const c1 = h("div");
     c1.textContent = "Category";
     header.appendChild(c1);

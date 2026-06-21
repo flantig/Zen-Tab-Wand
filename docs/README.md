@@ -16,7 +16,7 @@ Rules grow via three explicit paths: the settings UI rule editor, the tab right-
 | `auto-organize.uc.mjs` | Entry point. Branches on `window.location` to wire browser-context or preferences-context modules. |
 | `theme.json` | Sine mod manifest. Declares scripts, style, preferences. |
 | `preferences.json` | Sine settings schema — section headers and AI controls. The rules editor is injected as a custom widget from JS, not declared here. |
-| `userChrome.css` | Mod styling: pill table, color picker popover, toolbar wand button + wiggle animation, minimal-style override, preview-modal layout. |
+| `userChrome.css` | Mod styling: pill table, color/emoji popovers, toolbar wand button + wiggle animation, minimal-style override, preview-modal layout. |
 | `rules.json` | Legacy fallback rules used only if both the Sine pref and the built-in defaults somehow fail. |
 | `modules/*.mjs` | One module per concern. See per-file docs below. |
 | `modules/ai.mjs` | Pass 2 — local AI engine (Firefox's bundled ML, existing-group classification only). |
@@ -32,7 +32,7 @@ Read [chrome-globals.md](chrome-globals.md) first. It explains where `Services`,
 
 See [architecture.md](architecture.md) for the full picture; the short version:
 
-- **Settings widget** (about:preferences) lets the user define domain/title rules + colors.
+- **Settings widget** (about:preferences) lets the user define domain/title rules, colors/gradients, and icons.
 - **Tidy button** (browser.xhtml toolbar) triggers Pass 1, applies it, and runs cleanup passes.
 - **Tab right-click submenu** (browser.xhtml) lets the user explicitly add a tab's hostname to any rule or to the skip-domains list.
 
@@ -53,6 +53,7 @@ See [architecture.md](architecture.md) for the full picture; the short version:
 - [module-prefs-ui.md](module-prefs-ui.md) — Sine dialog detection, widget injection, conditional fields
 - [module-widget.md](module-widget.md) — rules editor table + Backup & Restore
 - [module-color-picker.md](module-color-picker.md) — color popover + palette fetch
+- [module-emoji-picker.md](module-emoji-picker.md) — local emoji/icon picker
 
 Modules without dedicated docs (small / self-explanatory — see source comments):
 - `modules/preview-modal.mjs` — Plan Mode interactive `<dialog>` (keep/skip groups, re-assign actions, applied/cancelled signal)

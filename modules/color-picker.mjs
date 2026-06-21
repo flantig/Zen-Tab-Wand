@@ -42,20 +42,26 @@ export const fetchZenColorsFromBrowser = () => {
   }
 };
 
-export const updateSwatchAppearance = (swatch, color) => {
+const swatchBackground = (color) => {
   if (color && isZenColorName(color)) {
-    swatch.style.background = bgForName(color);
-    swatch.classList.remove("zao-swatch-empty");
-    swatch.title = `Color: ${color}`;
-  } else if (color && isValidHex(color)) {
-    swatch.style.background = color;
-    swatch.classList.remove("zao-swatch-empty");
-    swatch.title = `Color: ${color}`;
-  } else {
+    return bgForName(color);
+  }
+  if (color && isValidHex(color)) return color;
+  return "";
+};
+
+export const updateSwatchAppearance = (swatch, color, color2) => {
+  const bg1 = swatchBackground(color);
+  const bg2 = swatchBackground(color2);
+  if (!bg1 && !bg2) {
     swatch.style.background = "";
     swatch.classList.add("zao-swatch-empty");
     swatch.title = "Click to pick a color";
+    return;
   }
+  swatch.classList.remove("zao-swatch-empty");
+  swatch.style.background = bg1 && bg2 ? `linear-gradient(90deg, ${bg1}, ${bg2})` : (bg1 || bg2);
+  swatch.title = bg1 && bg2 ? `Gradient: ${color} to ${color2}` : `Color: ${color || color2}`;
 };
 
 // Open the color popover anchored above the given swatch element.
@@ -84,7 +90,7 @@ export const openColorPopover = (rule, swatch, onChange) => {
       e.stopPropagation();
       rule.color = name;
       onChange();
-      updateSwatchAppearance(swatch, name);
+      updateSwatchAppearance(swatch, name, rule.color2);
       presets.querySelectorAll(".zao-preset").forEach((p) =>
         p.classList.toggle("zao-preset-active", p.dataset.zaoColor === name)
       );
@@ -94,33 +100,40 @@ export const openColorPopover = (rule, swatch, onChange) => {
   }
   pop.appendChild(presets);
 
-  hexInput = h("input");
-  hexInput.type = "text";
-  hexInput.className = "zao-color-hex";
-  hexInput.placeholder = "#hex";
-  hexInput.value = rule.color || "";
-  hexInput.spellcheck = false;
-  hexInput.addEventListener("input", () => {
-    const v = hexInput.value.trim();
-    if (v === "") {
-      delete rule.color;
-      onChange();
-      updateSwatchAppearance(swatch, null);
-    } else if (isValidHex(v)) {
-      rule.color = v;
-      onChange();
-      updateSwatchAppearance(swatch, v);
-    }
-  });
-  hexInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === "Escape") {
-      e.preventDefault();
-      pop.remove();
-      cleanup();
-    }
-  });
-  hexInput.addEventListener("click", (e) => e.stopPropagation());
-  pop.appendChild(hexInput);
+  const fields = h("div", { class: "zao-color-fields" });
+  const makeHexInput = (key, placeholder) => {
+    const input = h("input");
+    input.type = "text";
+    input.className = "zao-color-hex";
+    input.placeholder = placeholder;
+    input.value = rule[key] || "";
+    input.spellcheck = false;
+    input.addEventListener("input", () => {
+      const v = input.value.trim();
+      if (v === "") {
+        delete rule[key];
+        onChange();
+        updateSwatchAppearance(swatch, rule.color, rule.color2);
+      } else if (isValidHex(v) || isZenColorName(v)) {
+        rule[key] = v;
+        onChange();
+        updateSwatchAppearance(swatch, rule.color, rule.color2);
+      }
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === "Escape") {
+        e.preventDefault();
+        pop.remove();
+        cleanup();
+      }
+    });
+    input.addEventListener("click", (e) => e.stopPropagation());
+    return input;
+  };
+  hexInput = makeHexInput("color", "#start or name");
+  fields.appendChild(hexInput);
+  fields.appendChild(makeHexInput("color2", "#end or name"));
+  pop.appendChild(fields);
 
   // Append INSIDE the dialog (not document.body) so the popover shares the
   // top-layer that .showModal() creates. Anything outside the dialog gets hidden

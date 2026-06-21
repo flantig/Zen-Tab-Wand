@@ -15,12 +15,13 @@ Builds the pill table inside the settings dialog. One export, lots of internal h
 
 ```
 <div class="zao-rules-editor">
-  <div class="zao-header">           ← column titles: color / Category / Matches / —
+  <div class="zao-header">           ← column titles: color+icon / Category / Matches / —
     <div></div> <div>Category</div> <div>Matches</div> <div></div>
   </div>
   <div class="zao-row">              ← one row per rule
     <div class="zao-color-cell">
       <div class="zao-swatch" role="button" />
+      <button class="zao-icon-button">…</button>
     </div>
     <input class="zao-group-name" />
     <div class="zao-domains">
@@ -50,7 +51,8 @@ All elements created via `h(tag)` from `config.mjs` (the HTML namespace helper) 
 | Click `×` on pill | Removes the domain/title match, persists, re-renders. |
 | Click `×` on row | Removes the rule, persists, re-renders. |
 | Click `+ Add group` | Pushes a blank rule, persists, re-renders. |
-| Click swatch | Opens `color-picker.mjs` popover. |
+| Click swatch | Opens `color-picker.mjs` popover for solid/gradient colors. |
+| Click icon button | Opens `emoji-picker.mjs` popover. Pick from the local emoji grid, search by category, clear, or paste custom text. |
 
 ## Why a full re-render on each mutation
 

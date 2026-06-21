@@ -5,7 +5,7 @@
 | Name | Notes |
 |---|---|
 | `fetchZenColorsFromBrowser()` | Reads Zen's live computed tab-group palette from the main browser window and overwrites `HEX_BY_NAME` so swatches in the picker match Zen's actual rendered colors. |
-| `updateSwatchAppearance(swatch, color)` | Sets background + title + empty/non-empty state on a swatch div. |
+| `updateSwatchAppearance(swatch, color, color2)` | Sets background + title + empty/non-empty state on a swatch div. Shows a gradient preview when both colors are valid. |
 | `openColorPopover(rule, swatch, onChange)` | Opens the popover anchored above `swatch`. `onChange` is called after every preset pick or hex input change so the caller can persist. |
 
 ## Why fetch Zen colors at runtime
@@ -35,8 +35,9 @@ Both call a shared `cleanup()` that removes both listeners.
 
 | User action | Stored value |
 |---|---|
-| Click preset dot | the name string (`"blue"`) |
-| Type hex into input | the hex string (`"#abc123"`) |
-| Clear hex input | `rule.color` is `delete`d |
+| Click preset dot | `rule.color` is the name string (`"blue"`) |
+| Type into first color input | `rule.color` is the hex string (`"#abc123"`) or Zen color name |
+| Type into second color input | `rule.color2` is the hex string (`"#def456"`) or Zen color name |
+| Clear an input | matching field is `delete`d |
 
-The downstream `applyGroupColor` (in `groups.mjs`) handles both forms — see [module-groups.md](module-groups.md).
+If only one color is valid, the group renders solid. If both `color` and `color2` are valid, `groups.mjs` applies a two-color linear gradient while keeping `color` as the solid fallback.

@@ -23,7 +23,7 @@
 import { CONFIG, LOG, BUILD_VERSION, isZenColorName, isUnsetLabel } from "./config.mjs";
 import { getTabUrl, getHostname } from "./tabs.mjs";
 import { readRulesPref, writeRulesPref, readSkipDomainsPref, writeSkipDomainsPref, readCollapsedGroupsPref, writeCollapsedGroupsPref, isMinimalStyle } from "./rules.mjs";
-import { applyGroupColor, syncAllGroupColors, moveTabsToTop } from "./groups.mjs";
+import { applyGroupAppearance, syncAllGroupColors, moveTabsToTop } from "./groups.mjs";
 
 // ─── Helpers (module level so they're reusable + easy to find) ───────────────
 
@@ -368,11 +368,11 @@ const applyTabGroupRestoreState = (group) => {
 
     const rules = readRulesPref() || [];
     const rule = rules.find((r) => r.name === label);
-    if (rule?.color) {
+    if (rule) {
       // Defer one tick so Zen's own color setup (which runs synchronously
       // during group construction) is done before we override.
       setTimeout(() => {
-        if (group.isConnected) applyGroupColor(group, rule.color);
+        if (group.isConnected) applyGroupAppearance(group, rule);
       }, 0);
     }
   } catch (e) {

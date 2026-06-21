@@ -43,9 +43,9 @@ Fires when any tab-group element connects to the DOM — including ALL groups re
 
 1. Reads the group's `label`.
 2. Looks up a matching rule.
-3. If the rule has a `color`, defers one tick (so Zen's own color setup finishes) then calls `applyGroupColor(group, rule.color)`.
+3. If the group has a matching rule, defers one tick (so Zen's own color setup finishes) then calls `applyGroupAppearance(group, rule)`.
 
-This is why custom rule colors survive across Zen restarts even when Zen's session storage forgets them.
+This is why custom rule colors, gradients, and icons survive across Zen restarts even when Zen's session storage forgets them.
 
 ## minimal-style pref observer
 

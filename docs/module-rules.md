@@ -29,11 +29,13 @@ All read/write access to the rules pref + the file fallback. Cleans malformed in
   name: "Calendar",
   domains: ["calendar.google.com", "connect.garmin.com"],
   titleTerms: ["schedule"], // optional — case-insensitive substring matches
-  color: "blue"  // optional — Zen palette name OR hex like "#abc"
+  color: "blue",   // optional — Zen palette name OR hex like "#abc"
+  color2: "#8cf",  // optional — second color for a gradient
+  icon: "📅"       // optional — plain-text icon
 }
 ```
 
-`domains` and `titleTerms` are both optional at the JSON boundary, but a runnable rule needs a name plus at least one domain or title term. `readRulesPref` is permissive on `color`: accepts both a Zen palette name and a hex value. Anything else gets dropped.
+`domains` and `titleTerms` are both optional at the JSON boundary, but a runnable rule needs a name plus at least one domain or title term. `readRulesPref` is permissive on `color` and `color2`: accepts both a Zen palette name and a hex value. Anything else gets dropped.
 
 ## Why the pref is a JSON string, not a struct
 

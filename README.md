@@ -28,7 +28,7 @@ After install, a wand icon appears in your toolbar's workspace separator. Left-c
 ## Quick start
 
 1. Open **Settings → Zen Tab Wand**.
-2. Edit the **Group Rules** table to your liking. Each group needs a name, color, and one or more match chips: `@` chips for domains (e.g. `github.com`) and `T` chips for page-title keywords.
+2. Edit the **Group Rules** table to your liking. Each group needs a name and one or more match chips: `@` chips for domains (e.g. `github.com`) and `T` chips for page-title keywords. Colors, gradients, and icons are optional.
 3. Click the **wand button** in the toolbar. Your matching tabs are sorted instantly.
 4. (Optional) Pick an **AI engine** for tabs the rules don't cover — see below.
 
@@ -138,7 +138,7 @@ In Ollama **Auto-add** (new group) and **Always-add** (existing group) modes, ta
 - **Skip Domains** — a list of hostnames the wand should never touch. Tabs matching any pattern get ejected from any group and parked at the top of the workspace on every click. Useful for tabs you want to always keep visible and ungrouped. Grow the list from a tab right-click → **Add "host" to Rule…** → **Skip**.
 - **Rule matching priority** — choose URL only, Title only, URL then Title, or Title then URL. The rule list is still first-match-wins within whichever source is being checked.
 - **Strict rule enforcement** — when on, tabs sitting inside a group without any currently matching rule get ejected to the top on every wand click. Off by default.
-- **Minimal style** — strips the colored backgrounds from groups for a flatter look.
+- **Minimal style** — strips the colored backgrounds and gradients from groups for a flatter look. Rule icons stay visible.
 - **Keep Ollama model warm** — preloads the model at browser startup and keeps it in VRAM between clicks. Faster, but uses VRAM continuously.
 - **Local AI batch size** — only used when there are more than 75 unmatched tabs. The Local engine switches into a chunked pipeline that dedupes by hostname (one embedding per unique domain) and yields between batches so the browser stays responsive. Smaller batches = gentler on CPU, larger = faster. Above 500 unmatched tabs a confirmation modal appears before the AI pass runs.
 - **Rule reordering** — drag the handle on the left of any row in the Group Rules table to reorder rules. Order determines match priority when a hostname appears in more than one rule.
@@ -158,7 +158,7 @@ Inside the settings panel under **Backup & Restore**:
 
 ## Privacy
 
-- Domain rules + their colors are saved in your Zen browser prefs. Local only.
+- Rules, colors, gradients, and icons are saved in your Zen browser prefs. Local only.
 - The Local AI runs entirely on-device using Firefox's bundled model.
 - The Ollama engine talks to `localhost:11434` (or whatever host you configured). Nothing goes to the internet from this mod.
 - The mod fetches `<meta name="description">` snippets from your open tab URLs (to give the AI better context). These fetches use your browser cookies and stay between your browser and the destination site — same as if you'd refreshed the tab.

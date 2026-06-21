@@ -1,0 +1,137 @@
+// Zen Tab Wand — tiny no-dependency emoji picker for rule icons.
+
+import { CONFIG, h } from "./config.mjs";
+
+const EMOJI_SETS = [
+  ["Work", "💼", "📌", "📊", "📈", "📉", "🧾", "📝", "📅", "📬", "✅", "⚙️", "🔒"],
+  ["Dev", "💻", "🧑‍💻", "⌨️", "🛠️", "🐛", "🚀", "📦", "🌐", "🔧", "🧪", "📚", "🔍"],
+  ["Media", "▶️", "🎬", "🎧", "🎵", "📺", "📹", "📷", "🎮", "🍿", "📻", "🎙️", "⭐"],
+  ["Life", "🏠", "🛒", "💳", "🏦", "✈️", "🚗", "🍽️", "🏥", "💪", "🎁", "❤️", "🌱"],
+  ["AI", "✨", "🤖", "🧠", "💬", "🔮", "⚡", "🪄", "🧩", "📡", "🛰️", "🧬", "👁️"],
+];
+
+const ALL_EMOJIS = EMOJI_SETS.flatMap(([name, ...items]) =>
+  items.map((emoji) => ({ emoji, group: name.toLowerCase() }))
+);
+
+const matchesQuery = ({ emoji, group }, query) =>
+  !query || emoji.includes(query) || group.includes(query);
+
+export const updateIconButtonAppearance = (button, icon) => {
+  const value = typeof icon === "string" ? icon.trim() : "";
+  button.textContent = value || "◇";
+  button.classList.toggle("zao-icon-empty", !value);
+  button.title = value ? `Icon: ${value}` : "Pick an icon";
+  button.setAttribute("aria-label", value ? `Change icon ${value}` : "Pick an icon");
+};
+
+export const openEmojiPopover = (rule, anchor, onChange) => {
+  document.querySelectorAll(".zao-emoji-popover").forEach((p) => p.remove());
+
+  const pop = h("div", { class: "zao-emoji-popover" });
+  const search = h("input", { class: "zao-emoji-search" });
+  search.type = "text";
+  search.placeholder = "Search or paste";
+  search.value = rule.icon || "";
+  search.spellcheck = false;
+  pop.appendChild(search);
+
+  const grid = h("div", { class: "zao-emoji-grid" });
+  pop.appendChild(grid);
+
+  const actions = h("div", { class: "zao-emoji-actions" });
+  const clear = h("button", { class: "zao-emoji-action", text: "Clear" });
+  clear.type = "button";
+  const useText = h("button", { class: "zao-emoji-action", text: "Use text" });
+  useText.type = "button";
+  actions.appendChild(clear);
+  actions.appendChild(useText);
+  pop.appendChild(actions);
+
+  const commit = (value) => {
+    const icon = String(value || "").trim().slice(0, 12);
+    if (icon) rule.icon = icon;
+    else delete rule.icon;
+    onChange();
+    updateIconButtonAppearance(anchor, rule.icon);
+  };
+
+  const renderGrid = () => {
+    const query = search.value.trim().toLocaleLowerCase();
+    grid.replaceChildren();
+    for (const item of ALL_EMOJIS.filter((entry) => matchesQuery(entry, query))) {
+      const btn = h("button", { class: "zao-emoji-choice", text: item.emoji });
+      btn.type = "button";
+      btn.title = item.group;
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        commit(item.emoji);
+        pop.remove();
+        cleanup();
+      });
+      grid.appendChild(btn);
+    }
+  };
+
+  clear.addEventListener("click", (e) => {
+    e.stopPropagation();
+    commit("");
+    pop.remove();
+    cleanup();
+  });
+  useText.addEventListener("click", (e) => {
+    e.stopPropagation();
+    commit(search.value);
+    pop.remove();
+    cleanup();
+  });
+  search.addEventListener("input", renderGrid);
+  search.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commit(search.value);
+      pop.remove();
+      cleanup();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      pop.remove();
+      cleanup();
+    }
+  });
+  pop.addEventListener("click", (e) => e.stopPropagation());
+
+  const dialog = anchor.closest(".sineItemPreferenceDialog") || document.body;
+  dialog.appendChild(pop);
+
+  const r = anchor.getBoundingClientRect();
+  const popRect = pop.getBoundingClientRect();
+  const gap = CONFIG.POPOVER_GAP_PX;
+  pop.style.left = `${Math.max(gap, r.left)}px`;
+  const aboveTop = r.top - popRect.height - gap;
+  pop.style.top = `${aboveTop >= gap ? aboveTop : r.bottom + gap}px`;
+
+  const closeIfOutside = (e) => {
+    if (!pop.contains(e.target) && e.target !== anchor) {
+      pop.remove();
+      cleanup();
+    }
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") {
+      pop.remove();
+      cleanup();
+    }
+  };
+  const cleanup = () => {
+    document.removeEventListener("mousedown", closeIfOutside, true);
+    document.removeEventListener("keydown", onKey, true);
+  };
+
+  renderGrid();
+  setTimeout(() => {
+    document.addEventListener("mousedown", closeIfOutside, true);
+    document.addEventListener("keydown", onKey, true);
+    search.focus();
+    search.select();
+  }, 0);
+};

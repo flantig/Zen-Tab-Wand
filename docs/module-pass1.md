@@ -38,6 +38,6 @@ Only `byGroup` actually causes DOM mutation in `applyPass1`. The others are logg
 
 ## Color application timing
 
-`applyPass1` calls `applyGroupColor` on the target group AFTER moving tabs in. This is intentional — Zen's `group.color = name` setter dispatches a `TabGroupUpdate` event that may have side effects; doing it last avoids interleaving with the tab moves.
+`applyPass1` calls `applyGroupAppearance` on the target group AFTER moving tabs in. This applies solid colors, optional gradients, and icons. Doing it last avoids interleaving Zen's color update side effects with tab moves.
 
 A separate `syncAllGroupColors` pass (in `click-handler.mjs`) runs after `applyPass1` to catch rule-matched groups that `applyPass1` didn't touch because their tabs were already in the right place.
