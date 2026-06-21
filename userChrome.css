@@ -565,25 +565,37 @@ tab-group.zao-has-icon .tab-group-label::before {
   grid-template-columns: repeat(3, 42px);
   justify-content: center;
   gap: 6px;
+  direction: ltr;
   overflow: hidden;
 }
 .zao-emoji-choice {
   appearance: none;
   box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
+  display: block;
   width: 42px;
   height: 36px;
+  min-width: 42px;
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
   color: inherit;
   cursor: pointer;
-  font-size: 19px;
   line-height: 1;
   padding: 0;
   text-align: center;
+  text-indent: 0;
+  white-space: nowrap;
+}
+.zao-emoji-glyph {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  font-size: 19px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  unicode-bidi: isolate;
 }
 .zao-emoji-choice:hover,
 .zao-emoji-choice:focus {

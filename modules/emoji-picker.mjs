@@ -78,9 +78,11 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
     const start = page * PAGE_SIZE;
     grid.replaceChildren();
     for (const item of items.slice(start, start + PAGE_SIZE)) {
-      const btn = h("button", { class: "zao-emoji-choice", text: item.emoji });
+      const btn = h("button", { class: "zao-emoji-choice" });
       btn.type = "button";
       btn.title = item.group;
+      btn.setAttribute("aria-label", item.emoji);
+      btn.appendChild(h("span", { class: "zao-emoji-glyph", text: item.emoji }));
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         commit(item.emoji);
