@@ -11,7 +11,8 @@ All read/write access to the rules pref + the file fallback. Cleans malformed in
 | `validateRules(data)` | `Rule[]` | For rules.json file content — throws on bad input. |
 | `loadRules()` | async `Rule[]` | Precedence: pref → rules.json file → `DEFAULT_RULES`. |
 | `isMinimalStyle()` | bool | Reads the `minimal-style` pref. |
-| `isStrictRulesEnforced()` | bool | Reads the `strict-rules` pref (default false). When on, click-handler ejects tabs whose hostname isn't listed in their group's rule. |
+| `isStrictRulesEnforced()` | bool | Reads the `strict-rules` pref (default false). When on, click-handler ejects tabs that do not match their current group under the active match mode. |
+| `getMatchMode()` | `"url-only" \| "title-only" \| "url-then-title" \| "title-then-url"` | Reads the global URL/title matching priority. Unknown values fall back to `"url-then-title"`. |
 | `readSkipDomainsPref()` | `string[]` | Reads the JSON skip-domains pref. Returns `[]` if unset. |
 | `writeSkipDomainsPref(domains)` | void | Serializes and stores the skip-domains list. |
 | `getAIEngine()` | `"off" \| "local" \| "ollama"` | Normalized read of the engine pref (unknown / empty → `"off"`). |
@@ -27,11 +28,12 @@ All read/write access to the rules pref + the file fallback. Cleans malformed in
 {
   name: "Calendar",
   domains: ["calendar.google.com", "connect.garmin.com"],
+  titleTerms: ["schedule"], // optional — case-insensitive substring matches
   color: "blue"  // optional — Zen palette name OR hex like "#abc"
 }
 ```
 
-`readRulesPref` is permissive on `color`: accepts both a Zen palette name and a hex value. Anything else gets dropped.
+`domains` and `titleTerms` are both optional at the JSON boundary, but a runnable rule needs a name plus at least one domain or title term. `readRulesPref` is permissive on `color`: accepts both a Zen palette name and a hex value. Anything else gets dropped.
 
 ## Why the pref is a JSON string, not a struct
 

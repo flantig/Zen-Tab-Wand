@@ -8,7 +8,7 @@ A one-click tab tidier for [Zen Browser](https://zen-browser.app), installed via
 
 Two passes:
 
-1. **Domain rules first.** You define groups in settings — e.g. `Shopping` matches `amazon.com`, `staples.com`, etc. Every open tab whose hostname matches a rule moves into the corresponding group.
+1. **Rules first.** You define groups in settings — e.g. `Shopping` matches domains like `amazon.com`, or title keywords like `invoice`. Every open tab whose URL/title matches a rule moves into the corresponding group.
 2. **AI fallback for the rest.** Tabs the rules don't cover can be sent to a local AI engine that figures out where they belong. The AI is **optional and off by default**; you choose whether to enable it.
 
 There's no cloud component. The AI runs on your machine via [Ollama](https://ollama.com) (recommended) or Firefox's bundled ML engine (limited).
@@ -28,7 +28,7 @@ After install, a wand icon appears in your toolbar's workspace separator. Left-c
 ## Quick start
 
 1. Open **Settings → Zen Tab Wand**.
-2. Edit the **Group Rules** table to your liking. Each group needs a name, color, and one or more domains (e.g. `Dev` → `github.com, stackoverflow.com`).
+2. Edit the **Group Rules** table to your liking. Each group needs a name, color, and one or more match chips: `@` chips for domains (e.g. `github.com`) and `T` chips for page-title keywords.
 3. Click the **wand button** in the toolbar. Your matching tabs are sorted instantly.
 4. (Optional) Pick an **AI engine** for tabs the rules don't cover — see below.
 
@@ -136,7 +136,8 @@ In Ollama **Auto-add** (new group) and **Always-add** (existing group) modes, ta
 ## Other settings
 
 - **Skip Domains** — a list of hostnames the wand should never touch. Tabs matching any pattern get ejected from any group and parked at the top of the workspace on every click. Useful for tabs you want to always keep visible and ungrouped. Grow the list from a tab right-click → **Add "host" to Rule…** → **Skip**.
-- **Strict rule enforcement** — when on, tabs sitting inside a group whose rule doesn't list their hostname get ejected to the top on every wand click. Off by default.
+- **Rule matching priority** — choose URL only, Title only, URL then Title, or Title then URL. The rule list is still first-match-wins within whichever source is being checked.
+- **Strict rule enforcement** — when on, tabs sitting inside a group without any currently matching rule get ejected to the top on every wand click. Off by default.
 - **Minimal style** — strips the colored backgrounds from groups for a flatter look.
 - **Keep Ollama model warm** — preloads the model at browser startup and keeps it in VRAM between clicks. Faster, but uses VRAM continuously.
 - **Local AI batch size** — only used when there are more than 75 unmatched tabs. The Local engine switches into a chunked pipeline that dedupes by hostname (one embedding per unique domain) and yields between batches so the browser stays responsive. Smaller batches = gentler on CPU, larger = faster. Above 500 unmatched tabs a confirmation modal appears before the AI pass runs.

@@ -55,7 +55,7 @@ const injectStylesheet = async () => {
 const SECTION_DESCRIPTIONS = [
   [
     "Group Rules",
-    "Add groups and domains below; changes save instantly.",
+    "Add groups plus URL-domain and page-title matches below; changes save instantly.",
   ],
   [
     "Skip Domains",
@@ -67,7 +67,7 @@ const SECTION_DESCRIPTIONS = [
   ],
   [
     "Look & Feel",
-    "Tweaks to how grouped tabs render in Zen's sidebar.",
+    "Tweaks to how grouped tabs render and how URL/title rules are prioritized.",
   ],
   [
     "AI Sorting",

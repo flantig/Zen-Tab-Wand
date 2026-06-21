@@ -30,6 +30,18 @@
     "property": "extensions.zen-auto-organize.strict-rules",
     "defaultValue": false
   },
+  {
+    "type": "dropdown",
+    "label": "Rule matching priority",
+    "property": "extensions.zen-auto-organize.match-mode",
+    "defaultValue": "url-then-title",
+    "options": [
+      { "label": "URL only", "value": "url-only" },
+      { "label": "Title only", "value": "title-only" },
+      { "label": "URL then Title", "value": "url-then-title" },
+      { "label": "Title then URL", "value": "title-then-url" }
+    ]
+  },
 
   {
     "type": "separator",

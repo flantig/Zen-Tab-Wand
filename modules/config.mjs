@@ -50,6 +50,7 @@ export const CONFIG = {
   COLLAPSED_GROUPS_PREF: "extensions.zen-auto-organize.collapsed-groups-json",
   MINIMAL_STYLE_PREF: "extensions.zen-auto-organize.minimal-style",
   STRICT_RULES_PREF: "extensions.zen-auto-organize.strict-rules",
+  MATCH_MODE_PREF: "extensions.zen-auto-organize.match-mode",
 
   // AI Sorting (Pass 2). Engine governed by AI_ENGINE_PREF:
   //   "off"    — no AI pass

@@ -1,5 +1,5 @@
 {
-  "_comment": "Pass 1 domain rules. First match wins, so list more specific rules before more general ones (e.g. calendar.google.com before google.com). Pattern semantics: 'host.com' matches the bare host AND any subdomain. '*.host.com' matches subdomains only. Edit and click the button — no restart needed.",
+  "_comment": "Pass 1 rules. First match wins inside the selected match source. 'domains' match hostnames; optional 'titleTerms' match page titles case-insensitively. Domain pattern semantics: 'host.com' matches the bare host AND any subdomain. '*.host.com' matches subdomains only. Edit and click the button — no restart needed.",
   "rules": [
     { "name": "Calendar", "domains": ["calendar.google.com", "connect.garmin.com"] },
     { "name": "AI Tools", "domains": ["chat.openai.com", "gemini.google.com", "perplexity.ai"] },

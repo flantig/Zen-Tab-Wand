@@ -4,6 +4,37 @@
 
 import { CONFIG, DEFAULT_RULES, LOG, ZEN_COLOR_NAMES, isValidHex } from "./config.mjs";
 
+const cleanStringList = (value) =>
+  Array.isArray(value)
+    ? value.map((d) => String(d).trim()).filter((d) => d.length > 0)
+    : [];
+
+const keepColor = (value) => {
+  if (typeof value !== "string") return null;
+  const c = value.trim();
+  return ZEN_COLOR_NAMES.has(c) || isValidHex(c) ? c : null;
+};
+
+const cleanRule = (r) => {
+  const out = {
+    name: typeof r?.name === "string" ? r.name.trim() : "",
+    domains: cleanStringList(r?.domains),
+    titleTerms: cleanStringList(r?.titleTerms),
+  };
+  const color = keepColor(r?.color);
+  const color2 = keepColor(r?.color2);
+  if (color) out.color = color;
+  if (color2) out.color2 = color2;
+  if (typeof r?.icon === "string") {
+    const icon = r.icon.trim();
+    if (icon) out.icon = icon.slice(0, 12);
+  }
+  return out;
+};
+
+const isRunnableRule = (r) =>
+  r.name.length > 0 && (r.domains.length > 0 || r.titleTerms.length > 0);
+
 /**
  * Read the rules pref written by the settings widget.
  *
@@ -12,7 +43,8 @@ import { CONFIG, DEFAULT_RULES, LOG, ZEN_COLOR_NAMES, isValidHex } from "./confi
  *   - `[]`       — pref exists but every entry was malformed (and got dropped)
  *   - `Rule[]`   — one or more valid rules
  *
- * Each Rule has shape: `{ name: string, domains: string[], color?: string }`.
+ * Each Rule has shape:
+ * `{ name: string, domains: string[], titleTerms?: string[], color?: string, color2?: string, icon?: string }`.
  * Color is preserved if it's either a Zen palette name (e.g. "blue") or a hex (`#abc`).
  *
  * Malformed entries are silently dropped — invalid rules don't break valid ones.
@@ -37,21 +69,11 @@ export const readRulesPref = ({ keepIncomplete = false } = {}) => {
     if (!Array.isArray(parsed)) return null;
     const cleaned = parsed
       .map((r) => {
-        const out = {
-          name: typeof r?.name === "string" ? r.name.trim() : "",
-          domains: Array.isArray(r?.domains)
-            ? r.domains.map((d) => String(d).trim()).filter((d) => d.length > 0)
-            : [],
-        };
-        if (typeof r?.color === "string") {
-          const c = r.color.trim();
-          if (ZEN_COLOR_NAMES.has(c) || isValidHex(c)) out.color = c;
-        }
-        return out;
+        return cleanRule(r);
       });
     return keepIncomplete
       ? cleaned
-      : cleaned.filter((r) => r.name.length > 0 && r.domains.length > 0);
+      : cleaned.filter(isRunnableRule);
   } catch (e) {
     console.warn(`${LOG} rules pref parse failed:`, e);
     return null;
@@ -124,11 +146,19 @@ export const validateRules = (data) => {
     if (!rule || typeof rule.name !== "string" || !rule.name.trim()) {
       throw new Error(`rule[${i}] missing or empty 'name'`);
     }
-    if (!Array.isArray(rule.domains) || rule.domains.some((d) => typeof d !== "string")) {
+    const hasDomains = Array.isArray(rule.domains);
+    const hasTitles = Array.isArray(rule.titleTerms);
+    if (hasDomains && rule.domains.some((d) => typeof d !== "string")) {
       throw new Error(`rule[${i}] '${rule.name}': 'domains' must be a string array`);
     }
+    if (hasTitles && rule.titleTerms.some((d) => typeof d !== "string")) {
+      throw new Error(`rule[${i}] '${rule.name}': 'titleTerms' must be a string array`);
+    }
+    if (!hasDomains && !hasTitles) {
+      throw new Error(`rule[${i}] '${rule.name}': needs 'domains' or 'titleTerms'`);
+    }
   }
-  return data.rules;
+  return data.rules.map(cleanRule).filter(isRunnableRule);
 };
 
 const loadRulesFromFile = async () => {
@@ -176,6 +206,21 @@ export const isStrictRulesEnforced = () => {
   } catch {
     return false;
   }
+};
+
+export const getMatchMode = () => {
+  try {
+    const mode = Services.prefs.getStringPref(CONFIG.MATCH_MODE_PREF, "url-then-title");
+    if (
+      mode === "url-only" ||
+      mode === "title-only" ||
+      mode === "url-then-title" ||
+      mode === "title-then-url"
+    ) {
+      return mode;
+    }
+  } catch {}
+  return "url-then-title";
 };
 
 // Which AI engine is selected. Returns one of: "off" | "local" | "ollama".

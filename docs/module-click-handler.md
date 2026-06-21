@@ -24,7 +24,8 @@ The function the toolbar button invokes. Sequences all the passes.
 8.  console.groupCollapsed(...)       — dry-run logging
 9.  applyPass1(byGroup, ws, rules)    — execute moves (skipped in fresh-like AI modes)
 10. strict-rule ejection              — if strict-rules pref is on, eject any
-                                        unmatched tab still in a rule-named group
+                                        tab unmatched by URL/title rules that is
+                                        still in a rule-named group
                                         via moveTabsToTop
 11. getAIEngine() === "off" ? skip Pass 2 : continue
 12. setButtonThinking(true)           — start wand pulse animation

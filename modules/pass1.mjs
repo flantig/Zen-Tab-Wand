@@ -3,6 +3,7 @@
 
 import { LOG } from "./config.mjs";
 import { findExistingGroup, expandIfCollapsed, collapseGroup, applyGroupColor, findSafeInsertAnchor } from "./groups.mjs";
+import { getMatchMode } from "./rules.mjs";
 
 // Match a hostname against a single rule-domain pattern.
 //   "host.com"    matches the bare host AND any subdomain
@@ -16,14 +17,41 @@ export const matchesDomain = (hostname, pattern) => {
   return hostname === pattern || hostname.endsWith("." + pattern);
 };
 
-// First-match-wins: find the first rule whose domain patterns include the tab's hostname.
-export const findGroupForTab = (tabInfo, rules) => {
+export const matchesTitle = (title, term) => {
+  if (!title || !term) return false;
+  return title.toLocaleLowerCase().includes(term.toLocaleLowerCase());
+};
+
+const ruleMatchesDomain = (tabInfo, rule) =>
+  (rule.domains || []).some((d) => matchesDomain(tabInfo.hostname, d));
+
+const ruleMatchesTitle = (tabInfo, rule) =>
+  (rule.titleTerms || []).some((t) => matchesTitle(tabInfo.title, t));
+
+const findByDomain = (tabInfo, rules) => {
   for (const rule of rules) {
-    if (rule.domains.some((d) => matchesDomain(tabInfo.hostname, d))) {
-      return rule.name;
-    }
+    if (ruleMatchesDomain(tabInfo, rule)) return rule.name;
   }
   return null;
+};
+
+const findByTitle = (tabInfo, rules) => {
+  for (const rule of rules) {
+    if (ruleMatchesTitle(tabInfo, rule)) return rule.name;
+  }
+  return null;
+};
+
+// First-match-wins within the active match source. Global mode decides whether
+// URL or title terms are considered, and which source gets first crack.
+export const findGroupForTab = (tabInfo, rules) => {
+  const mode = getMatchMode();
+  if (mode === "url-only") return findByDomain(tabInfo, rules);
+  if (mode === "title-only") return findByTitle(tabInfo, rules);
+  if (mode === "title-then-url") {
+    return findByTitle(tabInfo, rules) || findByDomain(tabInfo, rules);
+  }
+  return findByDomain(tabInfo, rules) || findByTitle(tabInfo, rules);
 };
 
 /**

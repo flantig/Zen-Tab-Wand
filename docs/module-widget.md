@@ -15,8 +15,8 @@ Builds the pill table inside the settings dialog. One export, lots of internal h
 
 ```
 <div class="zao-rules-editor">
-  <div class="zao-header">           ← column titles: color / Category / Domains / —
-    <div></div> <div>Category</div> <div>Domains</div> <div></div>
+  <div class="zao-header">           ← column titles: color / Category / Matches / —
+    <div></div> <div>Category</div> <div>Matches</div> <div></div>
   </div>
   <div class="zao-row">              ← one row per rule
     <div class="zao-color-cell">
@@ -24,8 +24,10 @@ Builds the pill table inside the settings dialog. One export, lots of internal h
     </div>
     <input class="zao-group-name" />
     <div class="zao-domains">
-      <span class="zao-pill">…<button class="zao-pill-remove">×</button></span>
-      <button class="zao-pill-add">+</button>
+      <span class="zao-pill zao-domain-pill"><span class="zao-pill-kind">@</span>…</span>
+      <span class="zao-pill zao-title-pill"><span class="zao-pill-kind">T</span>…</span>
+      <button class="zao-pill-add zao-domain-add">+@</button>
+      <button class="zao-pill-add zao-title-add">+T</button>
     </div>
     <button class="zao-remove-row">×</button>
   </div>
@@ -43,8 +45,9 @@ All elements created via `h(tag)` from `config.mjs` (the HTML namespace helper) 
 | Action | What happens |
 |---|---|
 | Type in group-name input | `rule.name = value` on every keystroke; `persist()` |
-| Click `+` pill | Replaces the button with an `<input>`. Enter commits and re-renders. Escape cancels. Blur commits (via 0ms timeout so a click on another pill button registers first). |
-| Click `×` on pill | Removes the domain, persists, re-renders. |
+| Click `+@` pill | Adds a domain/hostname match chip. Enter commits and re-renders. Escape cancels. Blur commits. |
+| Click `+T` pill | Adds a page-title substring match chip. Enter commits and re-renders. Escape cancels. Blur commits. |
+| Click `×` on pill | Removes the domain/title match, persists, re-renders. |
 | Click `×` on row | Removes the rule, persists, re-renders. |
 | Click `+ Add group` | Pushes a blank rule, persists, re-renders. |
 | Click swatch | Opens `color-picker.mjs` popover. |

@@ -238,7 +238,7 @@ tab-group.zao-minimal {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 2px 2px 2px 9px;
+  padding: 2px 2px 2px 5px;
   background: color-mix(in srgb, currentColor 10%, transparent);
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   border-radius: 999px;
@@ -246,6 +246,30 @@ tab-group.zao-minimal {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   white-space: nowrap;
   max-width: 100%;
+}
+
+.zao-domain-pill {
+  background: color-mix(in srgb, AccentColor 12%, transparent);
+  border-color: color-mix(in srgb, AccentColor 30%, transparent);
+}
+
+.zao-title-pill {
+  background: color-mix(in srgb, #b56cff 14%, transparent);
+  border-color: color-mix(in srgb, #b56cff 35%, transparent);
+}
+
+.zao-pill-kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  opacity: 0.8;
 }
 
 .zao-pill > span {
@@ -289,6 +313,12 @@ tab-group.zao-minimal {
   cursor: pointer;
   opacity: 0.7;
   flex: 0 0 auto;
+}
+.zao-domain-add {
+  border-color: color-mix(in srgb, AccentColor 38%, transparent);
+}
+.zao-title-add {
+  border-color: color-mix(in srgb, #b56cff 45%, transparent);
 }
 .zao-pill-add:hover {
   opacity: 1;

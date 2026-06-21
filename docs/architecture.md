@@ -128,7 +128,8 @@ All prefs use the `extensions.zen-auto-organize.*` prefix (legacy; preserved acr
 
 - **Rules** live in `extensions.zen-auto-organize.rules-json` (a JSON-encoded array). Read/written by `rules.mjs`. Observed by the widget so external changes (right-click "Add to Rule" submenu, Backup & Restore import, AI Pass 2) refresh the table live.
 - **Skip domains** live in `extensions.zen-auto-organize.skip-domains-json` (a JSON-encoded array of hostname patterns). Read by click-handler step 6 to park matching tabs at the top of the workspace.
-- **Strict rule enforcement** lives in `extensions.zen-auto-organize.strict-rules` (boolean, default false). When true, click-handler step 9 ejects any tab whose rule doesn't list its hostname.
+- **Strict rule enforcement** lives in `extensions.zen-auto-organize.strict-rules` (boolean, default false). When true, click-handler step 9 ejects any tab that does not match its current group under the active URL/title match mode.
+- **Rule matching priority** lives in `extensions.zen-auto-organize.match-mode` (`"url-only" | "title-only" | "url-then-title" | "title-then-url"`, default `"url-then-title"`).
 - **Minimal style** lives in `extensions.zen-auto-organize.minimal-style`. Observed by `setupMinimalStylePrefObserver` (browser-hooks.mjs) so the style flips live across all workspaces.
 - **AI engine + behaviors** live in `extensions.zen-auto-organize.ai-engine` (`"" | "local" | "ollama"`), `.ai-existing-behavior`, `.ai-new-group-behavior`, `.ai-ollama-host`, `.ai-ollama-model`, `.ai-ollama-warmup`.
-- **Rule colors** are stored inline on each rule (`{ name, domains, color }`). The color is either a Zen palette name (`"blue"`) or a hex string (`"#abc"`).
+- **Rule colors** are stored inline on each rule (`{ name, domains, titleTerms, color }`). The color is either a Zen palette name (`"blue"`) or a hex string (`"#abc"`).

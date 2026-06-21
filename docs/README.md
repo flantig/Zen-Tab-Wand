@@ -2,7 +2,7 @@
 
 A Zen Browser Sine mod that auto-organizes tabs into groups using two passes:
 
-1. **Pass 1 — Deterministic domain rules**: a hostname-to-group map (e.g. `calendar.google.com → Calendar`) defined in the settings widget, matched first-match-wins.
+1. **Pass 1 — Deterministic rules**: a URL/title-to-group map (e.g. `calendar.google.com → Calendar`, or title contains `invoice → Work`) defined in the settings widget, matched first-match-wins within the selected match source.
 2. **Pass 2 — AI fallback** (shipped): unmatched tabs are sent to one of two engines:
    - **Local** (`modules/ai.mjs`): Firefox's bundled `Mozilla/smart-tab-embedding` model. Existing-group classification only; no new-group invention.
    - **Ollama** (`modules/ollama.mjs`): HTTP client to a local Ollama daemon at `localhost:11434`. Does both existing-group classification and AI-invented new-group clustering, with a merge pass and an optional interactive Plan Mode modal for user review.
@@ -32,7 +32,7 @@ Read [chrome-globals.md](chrome-globals.md) first. It explains where `Services`,
 
 See [architecture.md](architecture.md) for the full picture; the short version:
 
-- **Settings widget** (about:preferences) lets the user define rules + colors.
+- **Settings widget** (about:preferences) lets the user define domain/title rules + colors.
 - **Tidy button** (browser.xhtml toolbar) triggers Pass 1, applies it, and runs cleanup passes.
 - **Tab right-click submenu** (browser.xhtml) lets the user explicitly add a tab's hostname to any rule or to the skip-domains list.
 

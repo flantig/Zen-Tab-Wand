@@ -24,21 +24,34 @@ export const buildRulesEditor = (rules) => {
   // see it. Assigned in the `render = () => { ... }` block further down.
   let render;
 
-  const renderPill = (rule, dIdx) => {
+  const ensureRuleLists = (rule) => {
+    if (!Array.isArray(rule.domains)) rule.domains = [];
+    if (!Array.isArray(rule.titleTerms)) rule.titleTerms = [];
+  };
+
+  const renderPill = (rule, key, idx) => {
     const pill = h("span");
-    pill.className = "zao-pill";
+    const isTitle = key === "titleTerms";
+    pill.className = `zao-pill ${isTitle ? "zao-title-pill" : "zao-domain-pill"}`;
+
+    const kind = h("span");
+    kind.className = "zao-pill-kind";
+    kind.textContent = isTitle ? "T" : "@";
+    kind.title = isTitle ? "Title match" : "Domain match";
+    pill.appendChild(kind);
 
     const text = h("span");
-    text.textContent = rule.domains[dIdx];
+    text.textContent = rule[key][idx];
     pill.appendChild(text);
 
     const remove = h("button");
     remove.type = "button";
     remove.className = "zao-pill-remove";
     remove.textContent = "×";
-    remove.title = "Remove this domain";
+    remove.title = isTitle ? "Remove this title match" : "Remove this domain";
+    remove.setAttribute("aria-label", remove.title);
     remove.addEventListener("click", () => {
-      rule.domains.splice(dIdx, 1);
+      rule[key].splice(idx, 1);
       persist();
       render();
     });
@@ -47,17 +60,19 @@ export const buildRulesEditor = (rules) => {
     return pill;
   };
 
-  const renderAddPill = (rule) => {
+  const renderAddPill = (rule, key) => {
+    const isTitle = key === "titleTerms";
     const addBtn = h("button");
     addBtn.type = "button";
-    addBtn.className = "zao-pill-add";
-    addBtn.textContent = "+";
-    addBtn.title = "Add domain";
+    addBtn.className = `zao-pill-add ${isTitle ? "zao-title-add" : "zao-domain-add"}`;
+    addBtn.textContent = isTitle ? "+T" : "+@";
+    addBtn.title = isTitle ? "Add title match" : "Add domain";
+    addBtn.setAttribute("aria-label", addBtn.title);
     addBtn.addEventListener("click", () => {
       const input = h("input");
       input.type = "text";
       input.className = "zao-pill-input";
-      input.placeholder = "host.com or *.host.com";
+      input.placeholder = isTitle ? "title contains..." : "host.com or *.host.com";
 
       let done = false;
       const commit = () => {
@@ -65,7 +80,8 @@ export const buildRulesEditor = (rules) => {
         done = true;
         const val = input.value.trim();
         if (val) {
-          rule.domains.push(val);
+          ensureRuleLists(rule);
+          rule[key].push(val);
           persist();
         }
         render();
@@ -183,9 +199,11 @@ export const buildRulesEditor = (rules) => {
 
     const domainsEl = h("div");
     domainsEl.className = "zao-domains";
-    if (!Array.isArray(rule.domains)) rule.domains = [];
-    rule.domains.forEach((_, dIdx) => domainsEl.appendChild(renderPill(rule, dIdx)));
-    domainsEl.appendChild(renderAddPill(rule));
+    ensureRuleLists(rule);
+    rule.domains.forEach((_, dIdx) => domainsEl.appendChild(renderPill(rule, "domains", dIdx)));
+    rule.titleTerms.forEach((_, tIdx) => domainsEl.appendChild(renderPill(rule, "titleTerms", tIdx)));
+    domainsEl.appendChild(renderAddPill(rule, "domains"));
+    domainsEl.appendChild(renderAddPill(rule, "titleTerms"));
     row.appendChild(domainsEl);
 
     const removeBtn = h("button");
@@ -276,7 +294,7 @@ export const buildRulesEditor = (rules) => {
     c1.textContent = "Category";
     header.appendChild(c1);
     const c2 = h("div");
-    c2.textContent = "Domains";
+    c2.textContent = "Matches";
     header.appendChild(c2);
     header.appendChild(h("div")); // remove column
     container.appendChild(header);
@@ -297,7 +315,7 @@ export const buildRulesEditor = (rules) => {
     addRowBtn.className = "zao-add-row-btn";
     addRowBtn.textContent = "+ Add group";
     addRowBtn.addEventListener("click", () => {
-      rules.push({ name: "", domains: [] });
+      rules.push({ name: "", domains: [], titleTerms: [] });
       persist();
       render();
     });
@@ -611,11 +629,16 @@ export const buildBackupRestoreSection = () => {
               domains: Array.isArray(r?.domains)
                 ? r.domains.map((d) => String(d).trim()).filter(Boolean)
                 : [],
+              titleTerms: Array.isArray(r?.titleTerms)
+                ? r.titleTerms.map((d) => String(d).trim()).filter(Boolean)
+                : [],
               ...(typeof r?.color === "string" ? { color: r.color } : {}),
+              ...(typeof r?.color2 === "string" ? { color2: r.color2 } : {}),
+              ...(typeof r?.icon === "string" ? { icon: r.icon } : {}),
             }))
-            .filter((r) => r.name && r.domains.length);
+            .filter((r) => r.name && (r.domains.length || r.titleTerms.length));
           if (validRules.length === 0 && !importedSkip) {
-            throw new Error("No valid rules in import (each needs name + domains)");
+            throw new Error("No valid rules in import (each needs a name plus domains or title matches)");
           }
         }
 

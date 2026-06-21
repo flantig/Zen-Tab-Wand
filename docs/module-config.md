@@ -32,6 +32,7 @@ RULES_PREF                    // string pref holding the JSON-encoded rules arra
 SKIP_DOMAINS_PREF             // string pref holding the JSON-encoded skip-domains array
 MINIMAL_STYLE_PREF            // bool pref for the address-bar styling toggle
 STRICT_RULES_PREF             // bool pref — eject unmatched tabs from rule-named groups
+MATCH_MODE_PREF               // string: url-only | title-only | url-then-title | title-then-url
 AI_ENGINE_PREF                // string: "" | "local" | "ollama"
 AI_EXISTING_BEHAVIOR_PREF     // "always-add" | "transient"
 AI_NEW_GROUP_BEHAVIOR_PREF    // "auto-add" | "transient" | "prompt" | "fresh-categories" | "identify-only"
