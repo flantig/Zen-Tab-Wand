@@ -539,7 +539,7 @@ tab-group.zao-has-icon .tab-group-label::before {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  width: 188px;
+  width: 224px;
   padding: 8px;
   background: Canvas;
   color: CanvasText;
@@ -549,7 +549,7 @@ tab-group.zao-has-icon .tab-group-label::before {
 }
 .zao-emoji-search-row {
   display: grid;
-  grid-template-columns: 32px 1fr;
+  grid-template-columns: 32px minmax(0, 1fr);
   gap: 6px;
   align-items: center;
 }
@@ -595,6 +595,7 @@ tab-group.zao-has-icon .tab-group-label::before {
   appearance: none;
   box-sizing: border-box;
   width: 100%;
+  min-width: 0;
   background: transparent;
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
   border-radius: 5px;
