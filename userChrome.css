@@ -31,14 +31,19 @@ tab-group.zao-has-gradient .tab-group-label {
   background: var(--zao-tab-group-gradient, var(--tab-group-color)) !important;
 }
 
+tab-group.zao-has-icon .tab-group-label {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
 tab-group.zao-has-icon .tab-group-label::before {
   content: var(--zao-tab-group-icon);
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   margin-inline-end: 0.35em;
-  font-size: 1.25em;
+  font-size: 1.15em;
   line-height: 1;
-  vertical-align: middle;
-  transform: translateY(-0.06em);
+  transform: translateY(-0.12em);
 }
 
 /* --- Toolbar button: wiggle the wand on click --- */
@@ -530,10 +535,11 @@ tab-group.zao-has-icon .tab-group-label::before {
 .zao-emoji-popover {
   position: fixed;
   z-index: 999999;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 176px;
+  width: 214px;
   padding: 9px;
   background: Canvas;
   color: CanvasText;
@@ -556,12 +562,13 @@ tab-group.zao-has-icon .tab-group-label::before {
 }
 .zao-emoji-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   overflow: hidden;
 }
 .zao-emoji-choice {
   appearance: none;
+  box-sizing: border-box;
   width: 100%;
   height: 34px;
   border: 1px solid transparent;
@@ -581,29 +588,30 @@ tab-group.zao-has-icon .tab-group-label::before {
 }
 .zao-emoji-actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-}
-.zao-emoji-pager {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
   gap: 6px;
 }
+.zao-emoji-pager {
+  display: grid;
+  grid-template-columns: 54px 1fr 54px;
+  align-items: center;
+  gap: 6px;
+}
 .zao-emoji-page {
-  min-width: 36px;
   text-align: center;
   font-size: 12px;
   opacity: 0.75;
 }
 .zao-emoji-action {
   appearance: none;
+  box-sizing: border-box;
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
   border-radius: 5px;
   background: color-mix(in srgb, currentColor 7%, transparent);
   color: inherit;
   cursor: pointer;
   font-size: 12px;
+  min-width: 0;
   padding: 4px 8px;
 }
 .zao-emoji-action:disabled {
