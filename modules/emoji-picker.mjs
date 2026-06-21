@@ -304,12 +304,17 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
   document.querySelectorAll(".zao-emoji-popover").forEach((p) => p.remove());
 
   const pop = h("div", { class: "zao-emoji-popover" });
+  const searchRow = h("div", { class: "zao-emoji-search-row" });
+  const current = h("button", { class: "zao-emoji-current" });
+  current.type = "button";
   const search = h("input", { class: "zao-emoji-search" });
   search.type = "text";
   search.placeholder = "Search emoji";
   search.value = "";
   search.spellcheck = false;
-  pop.appendChild(search);
+  searchRow.appendChild(current);
+  searchRow.appendChild(search);
+  pop.appendChild(searchRow);
 
   const grid = h("div", { class: "zao-emoji-grid" });
   pop.appendChild(grid);
@@ -331,7 +336,17 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
     else delete rule.icon;
     onChange();
     updateIconButtonAppearance(anchor, rule.icon);
+    renderCurrent();
   };
+
+  function renderCurrent() {
+    const icon = typeof rule.icon === "string" ? rule.icon.trim() : "";
+    current.replaceChildren();
+    current.classList.toggle("zao-emoji-current-empty", !icon);
+    current.title = icon ? "Clear icon" : "No icon";
+    current.setAttribute("aria-label", icon ? "Clear icon" : "No icon set");
+    if (icon) current.appendChild(h("span", { class: "zao-emoji-glyph", text: icon }));
+  }
 
   let page = 0;
   const filteredItems = () => {
@@ -374,6 +389,10 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
     e.stopPropagation();
     page += 1;
     renderGrid();
+  });
+  current.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (rule.icon) commit("");
   });
   search.addEventListener("input", () => {
     page = 0;
@@ -419,6 +438,7 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
     document.removeEventListener("keydown", onKey, true);
   };
 
+  renderCurrent();
   renderGrid();
   setTimeout(() => {
     document.addEventListener("mousedown", closeIfOutside, true);

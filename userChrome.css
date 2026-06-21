@@ -547,8 +547,54 @@ tab-group.zao-has-icon .tab-group-label::before {
   border-radius: 8px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
 }
+.zao-emoji-search-row {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 6px;
+  align-items: center;
+}
+.zao-emoji-current {
+  appearance: none;
+  position: relative;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.zao-emoji-current::after {
+  content: "×";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: color-mix(in srgb, Canvas 72%, transparent);
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0;
+}
+.zao-emoji-current:hover::after,
+.zao-emoji-current:focus::after {
+  opacity: 1;
+}
+.zao-emoji-current-empty {
+  cursor: default;
+  border-style: dashed;
+  background: transparent;
+}
+.zao-emoji-current-empty::after {
+  content: "";
+}
 .zao-emoji-search {
   appearance: none;
+  box-sizing: border-box;
+  width: 100%;
   background: transparent;
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
   border-radius: 5px;

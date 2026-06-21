@@ -7,7 +7,7 @@ Small no-dependency picker used by the rules editor.
 | Name | Notes |
 |---|---|
 | `updateIconButtonAppearance(button, icon)` | Updates the row icon button text, empty state, title, and accessible label. |
-| `openEmojiPopover(rule, anchor, onChange)` | Opens a popover with search and a 3x3 paged local emoji grid. Search matches category names, emoji characters, and bundled Unicode-style emoji names. Stores the selected emoji in `rule.icon` and calls `onChange()` after edits. |
+| `openEmojiPopover(rule, anchor, onChange)` | Opens a popover with a current-icon clear slot, search, and a 3x3 paged local emoji grid. Search matches category names, emoji characters, and bundled Unicode-style emoji names. Stores the selected emoji in `rule.icon` and calls `onChange()` after edits. |
 
 ## Storage and rendering
 
