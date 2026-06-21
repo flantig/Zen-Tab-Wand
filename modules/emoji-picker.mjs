@@ -38,8 +38,8 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
   const pop = h("div", { class: "zao-emoji-popover" });
   const search = h("input", { class: "zao-emoji-search" });
   search.type = "text";
-  search.placeholder = "Search or paste";
-  search.value = rule.icon || "";
+  search.placeholder = "Search emoji";
+  search.value = "";
   search.spellcheck = false;
   pop.appendChild(search);
 
@@ -56,15 +56,6 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
   pager.appendChild(pageLabel);
   pager.appendChild(next);
   pop.appendChild(pager);
-
-  const actions = h("div", { class: "zao-emoji-actions" });
-  const clear = h("button", { class: "zao-emoji-action", text: "Clear" });
-  clear.type = "button";
-  const useText = h("button", { class: "zao-emoji-action", text: "Use text" });
-  useText.type = "button";
-  actions.appendChild(clear);
-  actions.appendChild(useText);
-  pop.appendChild(actions);
 
   const commit = (value) => {
     const icon = String(value || "").trim().slice(0, 12);
@@ -114,18 +105,6 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
     page += 1;
     renderGrid();
   });
-  clear.addEventListener("click", (e) => {
-    e.stopPropagation();
-    commit("");
-    pop.remove();
-    cleanup();
-  });
-  useText.addEventListener("click", (e) => {
-    e.stopPropagation();
-    commit(search.value);
-    pop.remove();
-    cleanup();
-  });
   search.addEventListener("input", () => {
     page = 0;
     renderGrid();
@@ -133,9 +112,7 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
   search.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      commit(search.value);
-      pop.remove();
-      cleanup();
+      grid.querySelector(".zao-emoji-choice")?.click();
     } else if (e.key === "Escape") {
       e.preventDefault();
       pop.remove();

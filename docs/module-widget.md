@@ -52,7 +52,7 @@ All elements created via `h(tag)` from `config.mjs` (the HTML namespace helper) 
 | Click `×` on row | Removes the rule, persists, re-renders. |
 | Click `+ Add group` | Pushes a blank rule, persists, re-renders. |
 | Click swatch | Opens `color-picker.mjs` popover for solid/gradient colors. |
-| Click icon button | Opens `emoji-picker.mjs` popover. Pick from the local emoji grid, search by category, clear, or paste custom text. |
+| Click icon button | Opens `emoji-picker.mjs` popover. Pick from the local emoji grid or search by category. |
 
 ## Why a full re-render on each mutation
 

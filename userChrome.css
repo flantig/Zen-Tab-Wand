@@ -586,11 +586,6 @@ tab-group.zao-has-icon .tab-group-label::before {
   border-color: color-mix(in srgb, currentColor 20%, transparent);
   outline: none;
 }
-.zao-emoji-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-}
 .zao-emoji-pager {
   display: grid;
   grid-template-columns: 54px 1fr 54px;
