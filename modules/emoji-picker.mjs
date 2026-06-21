@@ -150,7 +150,8 @@ export const openEmojiPopover = (rule, anchor, onChange) => {
   const r = anchor.getBoundingClientRect();
   const popRect = pop.getBoundingClientRect();
   const gap = CONFIG.POPOVER_GAP_PX;
-  pop.style.left = `${Math.max(gap, r.left)}px`;
+  const maxLeft = Math.max(gap, window.innerWidth - popRect.width - gap);
+  pop.style.left = `${Math.min(Math.max(gap, r.left), maxLeft)}px`;
   const aboveTop = r.top - popRect.height - gap;
   pop.style.top = `${aboveTop >= gap ? aboveTop : r.bottom + gap}px`;
 
