@@ -59,6 +59,7 @@ export const CONFIG = {
   //   "local"  — Firefox's bundled ML engine (modules/ai.mjs), existing-groups only
   //   "ollama" — local Ollama daemon (modules/ollama.mjs), existing + new groups
   AI_ENGINE_PREF: "extensions.zen-auto-organize.ai-engine",
+  AI_TITLE_LEARNING_PREF: "extensions.zen-auto-organize.ai-title-learning",
   AI_EXISTING_BEHAVIOR_PREF: "extensions.zen-auto-organize.ai-existing-behavior",
   AI_NEW_GROUP_BEHAVIOR_PREF: "extensions.zen-auto-organize.ai-new-group-behavior",
   AI_OLLAMA_HOST_PREF: "extensions.zen-auto-organize.ai-ollama-host",

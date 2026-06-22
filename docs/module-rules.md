@@ -18,6 +18,7 @@ All read/write access to the rules pref + the file fallback. Cleans malformed in
 | `readSkipDomainsPref()` | `string[]` | Reads the JSON skip-domains pref. Returns `[]` if unset. |
 | `writeSkipDomainsPref(domains)` | void | Serializes and stores the skip-domains list. |
 | `getAIEngine()` | `"off" \| "local" \| "ollama"` | Normalized read of the engine pref (unknown / empty → `"off"`). |
+| `getAITitleLearning()` | `"off" \| "review-save"` | Ollama-only title-term learning mode. Defaults to `"off"`. |
 | `getOllamaHost()` | string | Ollama base URL, falls back to default. |
 | `getOllamaModel()` | string | Ollama model name, falls back to default. |
 | `isOllamaWarmupEnabled()` | bool | Whether to preload + keep the model warm. |

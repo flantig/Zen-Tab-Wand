@@ -109,10 +109,10 @@ Then, if the AI engine is set to anything other than `"off"`:
 
 10. **setButtonThinking(true)** — start the wand's pulse animation while AI runs
 11. **runPass2** (ai.mjs **or** ollama.mjs) — depends on `ai-engine` pref:
-    - `"local"` → existing-group classification only, max-cosine over per-tab embeddings
+    - `"local"` → existing-group classification, or Fresh Categories clustering when selected
     - `"ollama"` → unified classify-and-cluster; can also invent new groups
-12. **Plan Mode gate** — if `ai-new-group-behavior` is `"identify-only"` OR (`"auto-add"` / `"always-add"` with new groups to confirm), `showPreviewModal` (preview-modal.mjs) opens with the plan; the user toggles which groups to keep and can re-assign-to-existing / re-assign-to-new in place. Apply is gated on the user's confirmation
-13. **applyPass2** — execute the (possibly user-edited) plan: move tabs into existing groups, create new ones, optionally grow the rules array
+12. **Preview gate** — Plan Mode always opens `showPreviewModal`; Ollama rule-mutating flows also open it before writing rules. With AI title learning enabled, reviewed `T` chips are proposed from actual tab titles before the modal opens
+13. **applyPass2** — execute the (possibly user-edited) plan: move tabs into existing groups, create new ones, optionally grow rule domains/title terms
 14. **fresh-categories cleanup** — if mode is `"fresh-categories"`, dissolve any group that has zero tabs after the rebuild
 
 Finally for every click:

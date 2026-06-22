@@ -4,7 +4,7 @@
 
 import { CONFIG, LOG, BUILD_VERSION } from "./config.mjs";
 // (CONFIG is used inside the click pipeline for thresholds, pref names, and DOM ids.)
-import { loadRules, readSkipDomainsPref, isMinimalStyle, isStrictRulesEnforced, getAIEngine, getOllamaHost, getOllamaModel, getAINewGroupBehavior, getAIExistingBehavior } from "./rules.mjs";
+import { loadRules, readSkipDomainsPref, isMinimalStyle, isStrictRulesEnforced, getAIEngine, getOllamaHost, getOllamaModel, getAINewGroupBehavior, getAIExistingBehavior, getAITitleLearning } from "./rules.mjs";
 import { getEligibleTabs } from "./tabs.mjs";
 import {
   consolidateDuplicateGroups,
@@ -16,7 +16,7 @@ import {
 } from "./groups.mjs";
 import { runPass1, applyPass1, matchesDomain } from "./pass1.mjs";
 import { runPass2, runPass2Fresh, applyPass2 } from "./ai.mjs";
-import { checkOllamaReady, reportOllamaError, normalizeOllamaHost, runPass2Ollama, runPass2OllamaFresh, classifyExistingGroupsBatch } from "./ollama.mjs";
+import { checkOllamaReady, reportOllamaError, normalizeOllamaHost, runPass2Ollama, runPass2OllamaFresh, classifyExistingGroupsBatch, proposeTitleTermPatches } from "./ollama.mjs";
 import { showPreviewModal } from "./preview-modal.mjs";
 
 // Module-version stamp so we can confirm the latest copy is loaded in the running window.
@@ -351,6 +351,20 @@ export const handleOrganizeClick = async () => {
           }
 
           if (showModal) {
+            if (!isIdentifyOnly && !isFreshMode && aiEngine === "ollama" && getAITitleLearning() === "review-save") {
+              const existingBehavior = getAIExistingBehavior();
+              const mutableGroups = new Set();
+              if (existingBehavior === "always-add") {
+                for (const a of pass2.assignedToExisting) mutableGroups.add(String(a.groupName || "").toLocaleLowerCase());
+              }
+              if (newGroupBehavior === "auto-add") {
+                for (const g of pass2.newGroups) mutableGroups.add(String(g.name || "").toLocaleLowerCase());
+              }
+              if (mutableGroups.size > 0) {
+                pass2.rulePatches = proposeTitleTermPatches(pass2, rules)
+                  .filter((patch) => mutableGroups.has(String(patch.groupName || "").toLocaleLowerCase()));
+              }
+            }
             console.debug(`${LOG} Plan Mode modal opening (${modalReason}) — user must confirm before rules mutate`);
             planToApply = await showPreviewModal({
               plan: pass2,
@@ -412,7 +426,7 @@ export const handleOrganizeClick = async () => {
 
           if (planToApply) {
             const ai = applyPass2(planToApply, workspaceId, rules);
-            console.log(`${LOG} Pass 2 applied: ${ai.movedToExisting} tab(s) → existing groups, ${ai.newGroupsCreated} new group(s), ${ai.rulesGrown} rule(s) grown, ${ai.newRulesCreated} new rule(s)`);
+            console.log(`${LOG} Pass 2 applied: ${ai.movedToExisting} tab(s) → existing groups, ${ai.newGroupsCreated} new group(s), ${ai.rulesGrown} domain rule add(s), ${ai.titleTermsGrown || 0} title term add(s), ${ai.newRulesCreated} new rule(s)`);
             // Use the filtered plan's skipped list for the post-apply cleanup
             // (in Plan Mode, this includes tabs from un-kept groups, which
             // should also get ungrouped from their pre-tidy containers).

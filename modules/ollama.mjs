@@ -44,6 +44,124 @@ const stripMetaPrefix = (s) => s
   .replace(/^\s*(?:new\s+)?(?:category|label|topic|bucket|group)\s*[:\-–]\s*/i, "")
   .trim();
 
+const TITLE_TERM_LIMIT = 3;
+const TITLE_TERM_STOPWORDS = new Set([
+  "about", "after", "again", "all", "and", "are", "best", "blog", "can",
+  "com", "for", "from", "guide", "home", "how", "into", "latest", "login",
+  "news", "official", "page", "pages", "post", "read", "reddit", "search",
+  "site", "the", "this", "tips", "today", "with", "you", "your",
+]);
+
+const titleTokens = (title) => {
+  const text = String(title || "").replace(/\s+/g, " ");
+  return text.match(/[A-Za-z0-9][A-Za-z0-9'’-]{1,38}/g) || [];
+};
+
+const normalizeTitleTerm = (term) =>
+  String(term || "").toLocaleLowerCase().replace(/[’]/g, "'").trim();
+
+const isUsefulTitleToken = (token, hostname = "") => {
+  const cleaned = String(token || "").replace(/^[^\w]+|[^\w]+$/g, "");
+  const norm = normalizeTitleTerm(cleaned);
+  if (norm.length < 3) return false;
+  if (TITLE_TERM_STOPWORDS.has(norm)) return false;
+  if (/^\d+$/.test(norm)) return false;
+  if (hostname && normalizeTitleTerm(hostname).split(".").includes(norm)) return false;
+  return true;
+};
+
+const collectTitleTermStats = (tabs) => {
+  const stats = new Map();
+  for (const tab of tabs || []) {
+    const seenInTab = new Set();
+    for (const raw of titleTokens(tab?.title)) {
+      const term = raw.replace(/^[^\w]+|[^\w]+$/g, "");
+      if (!isUsefulTitleToken(term, tab?.hostname)) continue;
+      const key = normalizeTitleTerm(term);
+      if (seenInTab.has(key)) continue;
+      seenInTab.add(key);
+      if (!stats.has(key)) {
+        stats.set(key, { term, count: 0, hosts: new Set() });
+      }
+      const stat = stats.get(key);
+      stat.count++;
+      if (tab?.hostname) stat.hosts.add(tab.hostname);
+      if (stat.term === stat.term.toLocaleLowerCase() && term !== term.toLocaleLowerCase()) {
+        stat.term = term;
+      }
+    }
+  }
+  return stats;
+};
+
+const allPlanGroups = (plan) => {
+  const byName = new Map();
+  for (const g of plan?.newGroups || []) {
+    byName.set(g.name, { name: g.name, tabs: [...(g.tabs || [])] });
+  }
+  for (const a of plan?.assignedToExisting || []) {
+    if (!byName.has(a.groupName)) byName.set(a.groupName, { name: a.groupName, tabs: [] });
+    byName.get(a.groupName).tabs.push(a.tabInfo);
+  }
+  return [...byName.values()];
+};
+
+export const proposeTitleTermPatches = (plan, rules) => {
+  const groups = allPlanGroups(plan);
+  if (groups.length === 0) return [];
+
+  const existingTermsByRule = new Map(
+    (rules || []).map((r) => [
+      r.name,
+      new Set((r.titleTerms || []).map(normalizeTitleTerm)),
+    ])
+  );
+  const existingTermOwners = new Map();
+  for (const rule of rules || []) {
+    for (const term of rule.titleTerms || []) {
+      const key = normalizeTitleTerm(term);
+      if (!key) continue;
+      if (!existingTermOwners.has(key)) existingTermOwners.set(key, new Set());
+      existingTermOwners.get(key).add(rule.name);
+    }
+  }
+
+  const statsByGroup = new Map(groups.map((g) => [g.name, collectTitleTermStats(g.tabs)]));
+  const patches = [];
+  for (const group of groups) {
+    const existingForGroup = existingTermsByRule.get(group.name) || new Set();
+    const candidates = [...(statsByGroup.get(group.name)?.entries() || [])]
+      .filter(([key, stat]) => !existingForGroup.has(key) && (stat.count >= 2 || stat.hosts.size >= 2))
+      .sort((a, b) => {
+        const statA = a[1];
+        const statB = b[1];
+        return (statB.hosts.size - statA.hosts.size) ||
+          (statB.count - statA.count) ||
+          (statA.term.length - statB.term.length);
+      });
+
+    const titleTerms = [];
+    for (const [key, stat] of candidates) {
+      let warning = "";
+      const otherRuleOwners = [...(existingTermOwners.get(key) || [])]
+        .filter((name) => name !== group.name);
+      if (otherRuleOwners.length > 0) {
+        warning = `Already used by ${otherRuleOwners.join(", ")}`;
+      } else {
+        const otherGroups = groups
+          .filter((other) => other.name !== group.name)
+          .filter((other) => statsByGroup.get(other.name)?.has(key))
+          .map((other) => other.name);
+        if (otherGroups.length > 0) warning = `Also appears in ${otherGroups.join(", ")}`;
+      }
+      titleTerms.push(warning ? { term: stat.term, warning } : { term: stat.term });
+      if (titleTerms.length >= TITLE_TERM_LIMIT) break;
+    }
+    if (titleTerms.length > 0) patches.push({ groupName: group.name, titleTerms });
+  }
+  return patches;
+};
+
 // ─── Classify into existing rules ────────────────────────────────────────────
 // Returns Map<tabIndex, groupName | null>. Throws on transport / parse errors;
 // caller surfaces to the user. Used both directly (re-assign-to-planned in

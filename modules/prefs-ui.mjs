@@ -175,6 +175,7 @@ const CONTROL_ROW_PREFS = [
   CONFIG.MATCH_MODE_PREF,
   CONFIG.GRADIENT_STYLE_PREF,
   CONFIG.AI_ENGINE_PREF,
+  CONFIG.AI_TITLE_LEARNING_PREF,
   CONFIG.AI_EXISTING_BEHAVIOR_PREF,
   CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF,
   CONFIG.AI_OLLAMA_HOST_PREF,
@@ -245,6 +246,7 @@ const updateConditionalFields = (dialog) => {
   //   the single dropdown (auto-add = grow rules; transient = don't; fresh =
   //   re-cluster ignoring rules entirely).
   setHidden(findPrefRow(dialog, CONFIG.AI_EXISTING_BEHAVIOR_PREF), engine !== "ollama");
+  setHidden(findPrefRow(dialog, CONFIG.AI_TITLE_LEARNING_PREF), engine !== "ollama");
   const newGroupBehaviorRow = findPrefRow(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF);
   setHidden(newGroupBehaviorRow, !isLocalOrOllama);
   if (engine === "local") {

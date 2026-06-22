@@ -33,9 +33,11 @@ The function the toolbar button invokes. Sequences all the passes.
        "local"  → ai.mjs runPass2()       (existing groups or simple new groups)
        "ollama" → ollama.mjs runPass2Ollama() OR runPass2OllamaFresh()
                   depending on ai-new-group-behavior
-14. Plan Mode gate (if applicable):
-       getAINewGroupBehavior() in ("identify-only", "auto-add",
-       "always-add" with new groups) → showPreviewModal(plan)
+14. Preview gate (if applicable):
+       Plan Mode always opens showPreviewModal(plan). Ollama rule-mutating
+       flows (Always-add existing rules and/or Auto-add new rules) also open it
+       so the user can approve rule changes first. If AI title learning is
+       enabled, reviewed T chips are attached here before the modal opens.
        Modal returns the user-edited plan. Apply waits for confirmation.
 15. applyPass2(plan, ws, rules)       — execute moves; create new groups;
                                         optionally grow rules array

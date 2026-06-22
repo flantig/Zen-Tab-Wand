@@ -238,6 +238,16 @@ export const getAIEngine = () => {
   }
 };
 
+export const getAITitleLearning = () => {
+  try {
+    return Services.prefs.getStringPref(CONFIG.AI_TITLE_LEARNING_PREF, "off") === "review-save"
+      ? "review-save"
+      : "off";
+  } catch {
+    return "off";
+  }
+};
+
 export const getOllamaHost = () => {
   try {
     const v = Services.prefs.getStringPref(CONFIG.AI_OLLAMA_HOST_PREF, "").trim();

@@ -27,7 +27,7 @@ Ships with Zen/Firefox. First load takes 1–3s (model warm-up). Subsequent call
 | Name | Notes |
 |---|---|
 | `runPass2(unmatched, rules, workspaceId)` | Pure planning — returns assignment plan without mutating DOM. `newGroups` is always `[]` in the local-AI path. |
-| `applyPass2(plan, workspaceId, rules)` | Executes the plan: moves tabs into existing groups, optionally grows rules. Mutates the `rules` array and writes it to the pref. |
+| `applyPass2(plan, workspaceId, rules)` | Executes the plan: moves tabs into existing groups, optionally grows domains/titleTerms, and optionally creates rules. Mutates the `rules` array and writes it to the pref. |
 
 ## Pipeline
 
@@ -74,9 +74,13 @@ unmatched tabs (from runPass1)
 | `always-add` (default) | Move the tab AND append its hostname to the rule's `domains[]`. Rules grow over time. |
 | `transient` | Move the tab only. Rules untouched — next click would have to re-classify the same tabs. |
 
-### `ai-new-group-behavior` — does not apply in local-AI mode
+### Local Fresh title context
 
-The dropdown affects only the Ollama engine. The local-AI path never invents new groups, so its setting is irrelevant when the AI engine is "Local". See [module-ollama.md](module-ollama.md).
+Local Fresh Categories uses title + hostname + fetched page snippet text as transient clustering input. It never persists `titleTerms`; title persistence is Ollama-only and reviewed in the preview modal.
+
+### `ai-new-group-behavior`
+
+For Local, only Fresh Categories and Plan Mode create new groups. Transient/Auto-add title learning is ignored locally. For full rule-learning behavior, use the Ollama engine. See [module-ollama.md](module-ollama.md).
 
 ## Failure modes
 

@@ -76,6 +76,16 @@
   },
   {
     "type": "dropdown",
+    "label": "AI title learning — propose reviewed T chips from tab titles",
+    "property": "extensions.zen-auto-organize.ai-title-learning",
+    "defaultValue": "off",
+    "options": [
+      { "label": "Off", "value": "off" },
+      { "label": "Review & Save", "value": "review-save" }
+    ]
+  },
+  {
+    "type": "dropdown",
     "label": "When AI assigns a tab to an existing group",
     "property": "extensions.zen-auto-organize.ai-existing-behavior",
     "defaultValue": "always-add",

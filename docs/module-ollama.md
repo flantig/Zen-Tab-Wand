@@ -17,6 +17,7 @@ The implementation is split across three files for clarity:
 | `runPass2Ollama(unmatched, rules, workspaceId, host, model)` | Unified classify + cluster + merge pass. Returns the standard Pass 2 plan shape `{ assignedToExisting, newGroups, skipped }`. |
 | `runPass2OllamaFresh(allTabs, host, model)` | Fresh-categories mode — ignores rules entirely, lets the model invent groups from scratch. Used when `ai-new-group-behavior = "fresh-categories"`. |
 | `classifyExistingGroupsBatch(tabs, rules, host, model)` | Single-pass "assign these tabs into one of these existing groups" call. Used by the Plan Mode modal's **Re-assign to existing** action. |
+| `proposeTitleTermPatches(plan, rules)` | Extracts reviewed title keyword candidates from grouped tab titles for modal-confirmed rule growth. |
 | `unifiedClassifyOllama` / `clusterUnmatchedNewGroups` / `mergeNewCategoriesPass` | Internal-but-exported building blocks. |
 | `warmupOllama(host, model)`, `checkOllamaReady(host)`, `reportOllamaError(...)` | Re-exported from `ollama-transport.mjs` for callers that don't want to know about the split. |
 
@@ -27,6 +28,10 @@ All `/api/generate` calls use `format: "json"`, `temperature: 0`, and a fixed `s
 ## Why a flat key-value schema for the merge prompt
 
 Earlier merge-prompt iterations asked the model to return nested `[{name, from: [...]}, ...]` arrays. qwen2.5:1.5b consistently emitted malformed nested arrays — missing closing brackets, hallucinated extra fields. Switching to a flat `{ "OriginalGroup": "MergedTarget" }` map fixed it. Same semantic information, far higher success rate.
+
+## Title learning
+
+When `ai-title-learning = "review-save"`, Ollama rule-mutating flows can add reviewed `T` chips to rules. The model still decides the grouping; title terms are extracted deterministically from actual tab titles after the plan is built. Terms are capped at three per group, existing terms are skipped, and terms that also appear in another proposed group or existing rule are shown as warning chips in the preview modal. Applying the modal saves title terms only for kept groups.
 
 ## Lifecycle: warmup + keep-alive
 

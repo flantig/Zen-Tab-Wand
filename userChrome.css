@@ -1090,6 +1090,20 @@ dialog.zao-warning-dialog::backdrop {
   opacity: 1;
 }
 
+.zao-preview-rule-patches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 7px;
+}
+.zao-preview-title-chip {
+  cursor: default;
+}
+.zao-preview-title-chip-warning {
+  border-color: color-mix(in srgb, #ffbc4a 65%, transparent);
+  background: color-mix(in srgb, #ffbc4a 18%, transparent);
+}
+
 .zao-preview-tab-list {
   list-style: none;
   margin: 0;

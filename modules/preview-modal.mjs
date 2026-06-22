@@ -31,6 +31,10 @@ const existingKey = (name) => `existing:${name.toLowerCase()}`;
 const clonePlan = (p) => ({
   assignedToExisting: (p.assignedToExisting || []).map((a) => ({ ...a })),
   newGroups: (p.newGroups || []).map((g) => ({ name: g.name, tabs: [...g.tabs] })),
+  rulePatches: (p.rulePatches || []).map((patch) => ({
+    groupName: patch.groupName,
+    titleTerms: (patch.titleTerms || []).map((t) => ({ ...t })),
+  })),
   skipped: [...(p.skipped || [])],
 });
 
@@ -232,10 +236,32 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
       }));
       block.appendChild(head);
 
+      const patch = titlePatchFor(g.name);
+      if (patch?.titleTerms?.length) block.appendChild(renderRulePatch(patch));
+
       const ul = h("ul", { class: "zao-preview-tab-list" });
       for (const t of g.tabs) ul.appendChild(renderTabRow(t));
       block.appendChild(ul);
       return block;
+    }
+
+    function titlePatchFor(groupName) {
+      const key = String(groupName || "").toLocaleLowerCase();
+      return (currentPlan.rulePatches || []).find((patch) =>
+        String(patch.groupName || "").toLocaleLowerCase() === key
+      );
+    }
+
+    function renderRulePatch(patch) {
+      const wrap = h("div", { class: "zao-preview-rule-patches" });
+      for (const item of patch.titleTerms || []) {
+        const pill = h("span", { class: `zao-pill zao-title-pill zao-preview-title-chip${item.warning ? " zao-preview-title-chip-warning" : ""}` });
+        if (item.warning) pill.title = item.warning;
+        pill.appendChild(h("span", { class: "zao-pill-kind", text: "T" }));
+        pill.appendChild(h("span", { text: item.term }));
+        wrap.appendChild(pill);
+      }
+      return wrap;
     }
 
     function renderTabRow(tabInfo) {
@@ -321,6 +347,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
           kept.has(existingKey(a.groupName))
         );
         currentPlan.newGroups.push(...incomingGroups);
+        currentPlan.rulePatches = [];
         currentPlan.skipped = newSkipped;
         // Auto-keep the newly proposed groups.
         for (const g of incomingGroups) kept.add(newKey(g.name));
@@ -379,6 +406,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
           }
         }
         currentPlan.skipped = newSkipped;
+        currentPlan.rulePatches = [];
         console.log(`${LOG} preview modal: re-assigned ${pending.length} tab(s) to planned → ${placed} placed, ${newSkipped.length} skipped`);
       });
     }
@@ -416,6 +444,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
           placed++;
         }
         currentPlan.skipped = newSkipped;
+        currentPlan.rulePatches = [];
         console.log(`${LOG} preview modal: re-assigned ${pending.length} tab(s) to existing rules → ${placed} placed, ${newSkipped.length} skipped`);
       });
     }
@@ -434,9 +463,17 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
         droppedTabs.push(a.tabInfo);
         return false;
       });
+      const keptGroupNames = new Set([
+        ...finalNewGroups.map((g) => String(g.name || "").toLocaleLowerCase()),
+        ...finalExisting.map((a) => String(a.groupName || "").toLocaleLowerCase()),
+      ]);
+      const finalRulePatches = (currentPlan.rulePatches || []).filter((patch) =>
+        keptGroupNames.has(String(patch.groupName || "").toLocaleLowerCase())
+      );
       cleanup({
         assignedToExisting: finalExisting,
         newGroups: finalNewGroups,
+        rulePatches: finalRulePatches,
         skipped: [...currentPlan.skipped, ...droppedTabs],
       });
     }

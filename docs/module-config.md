@@ -36,6 +36,7 @@ STRICT_RULES_PREF             // bool pref — eject unmatched tabs from rule-na
 MATCH_MODE_PREF               // string: url-only | title-only | url-then-title | title-then-url
 GRADIENT_STYLE_PREF           // string: left-right | right-left | top-bottom | bottom-top | diagonal-down | diagonal-up | radial
 AI_ENGINE_PREF                // string: "" | "local" | "ollama"
+AI_TITLE_LEARNING_PREF        // string: off | review-save
 AI_EXISTING_BEHAVIOR_PREF     // "always-add" | "transient"
 AI_NEW_GROUP_BEHAVIOR_PREF    // "auto-add" | "transient" | "prompt" | "fresh-categories" | "identify-only"
 AI_OLLAMA_HOST_PREF           // string, default http://localhost:11434
