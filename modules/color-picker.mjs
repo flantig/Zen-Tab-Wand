@@ -75,7 +75,7 @@ export const openColorPopover = (rule, swatch, onChange) => {
   const presets = h("div");
   presets.className = "zao-presets";
 
-  let hexInput; // declared up here so preset clicks can clear it
+  let hexInput; // declared up here so preset clicks can mirror the primary color
 
   for (const { name } of PRESET_COLORS) {
     const dot = h("div");
@@ -94,7 +94,7 @@ export const openColorPopover = (rule, swatch, onChange) => {
       presets.querySelectorAll(".zao-preset").forEach((p) =>
         p.classList.toggle("zao-preset-active", p.dataset.zaoColor === name)
       );
-      if (hexInput) hexInput.value = "";
+      if (hexInput) hexInput.value = name;
     });
     presets.appendChild(dot);
   }
