@@ -97,7 +97,50 @@ const existingTitleTermKeys = (rules) => {
   return out;
 };
 
-const collectTitleTermCandidates = (plan, rules) => {
+const addTitleCandidate = (byKey, existingTerms, group, tab, raw, snippet = "") => {
+  const term = String(raw || "").replace(/^[^\w]+|[^\w]+$/g, "");
+  if (!isUsefulTitleToken(term, tab?.hostname)) return;
+  const key = normalizeTitleTerm(term);
+  if (existingTerms.has(key)) return;
+  if (!byKey.has(key)) {
+    byKey.set(key, { term, count: 0, hosts: new Set(), titles: new Set(), urls: new Set(), snippets: new Set(), sourceGroups: new Set() });
+  }
+  const candidate = byKey.get(key);
+  candidate.count++;
+  if (tab?.hostname) candidate.hosts.add(tab.hostname);
+  if (tab?.title) candidate.titles.add(tab.title);
+  if (tab?.url) candidate.urls.add(tab.url);
+  if (snippet) candidate.snippets.add(snippet);
+  if (group.name) candidate.sourceGroups.add(group.name);
+  if (candidate.term === candidate.term.toLocaleLowerCase() && term !== term.toLocaleLowerCase()) {
+    candidate.term = term;
+  }
+};
+
+const fetchContentCandidateSnippets = async (groups) => {
+  const seen = new Set();
+  const jobs = [];
+  for (const group of groups) {
+    for (const tab of group.tabs || []) {
+      const url = tab?.url || "";
+      if (!url.startsWith("http://") && !url.startsWith("https://")) continue;
+      if (seen.has(url)) continue;
+      seen.add(url);
+      jobs.push({ group, tab });
+      if (jobs.length >= 30) break;
+    }
+    if (jobs.length >= 30) break;
+  }
+
+  const snippets = await Promise.all(jobs.map(async ({ group, tab }) => ({
+    group,
+    tab,
+    snippet: await fetchPageSnippet(tab.url),
+  })));
+  return snippets.filter((entry) => entry.snippet);
+};
+
+const collectTitleTermCandidates = async (plan, rules, mode) => {
   const groups = allPlanGroups(plan);
   if (groups.length === 0) return [];
 
@@ -112,24 +155,27 @@ const collectTitleTermCandidates = (plan, rules) => {
         const key = normalizeTitleTerm(term);
         if (existingTerms.has(key) || seenInTab.has(key)) continue;
         seenInTab.add(key);
-        if (!byKey.has(key)) {
-          byKey.set(key, { term, count: 0, hosts: new Set(), titles: new Set(), urls: new Set(), sourceGroups: new Set() });
-        }
-        const candidate = byKey.get(key);
-        candidate.count++;
-        if (tab?.hostname) candidate.hosts.add(tab.hostname);
-        if (tab?.title) candidate.titles.add(tab.title);
-        if (tab?.url) candidate.urls.add(tab.url);
-        if (group.name) candidate.sourceGroups.add(group.name);
-        if (candidate.term === candidate.term.toLocaleLowerCase() && term !== term.toLocaleLowerCase()) {
-          candidate.term = term;
-        }
+        addTitleCandidate(byKey, existingTerms, group, tab, term);
+      }
+    }
+  }
+
+  if (mode === "review-save-complex") {
+    const contentEntries = await fetchContentCandidateSnippets(groups);
+    for (const { group, tab, snippet } of contentEntries) {
+      const seenInSnippet = new Set();
+      for (const raw of titleTokens(snippet)) {
+        const term = raw.replace(/^[^\w]+|[^\w]+$/g, "");
+        const key = normalizeTitleTerm(term);
+        if (existingTerms.has(key) || seenInSnippet.has(key)) continue;
+        seenInSnippet.add(key);
+        addTitleCandidate(byKey, existingTerms, group, tab, term, snippet);
       }
     }
   }
 
   return [...byKey.values()]
-    .filter((c) => c.count >= 2 || c.hosts.size >= 2)
+    .filter((c) => c.count >= 2 || c.hosts.size >= 2 || c.snippets.size > 0)
     .sort((a, b) =>
       (b.hosts.size - a.hosts.size) ||
       (b.count - a.count) ||
@@ -140,26 +186,14 @@ const collectTitleTermCandidates = (plan, rules) => {
       term: c.term,
       titles: [...c.titles],
       urls: [...c.urls],
+      snippets: [...c.snippets],
       sourceGroups: [...c.sourceGroups],
     }));
 };
 
-const enrichTitleCandidates = async (candidates, mode) => {
-  if (mode !== "review-save-complex") return candidates;
-  return Promise.all(candidates.map(async (candidate) => {
-    const snippets = [];
-    for (const url of candidate.urls.slice(0, 2)) {
-      const snippet = await fetchPageSnippet(url);
-      if (snippet) snippets.push(snippet);
-    }
-    return { ...candidate, snippets };
-  }));
-};
-
 export const proposeTitleTermPatches = async (plan, rules, host, model, mode = "review-save-simple") => {
-  let candidates = collectTitleTermCandidates(plan, rules);
+  const candidates = await collectTitleTermCandidates(plan, rules, mode);
   if (candidates.length === 0) return [];
-  candidates = await enrichTitleCandidates(candidates, mode);
 
   const prompt = buildTitleTermPrompt(rules, candidates, mode === "review-save-complex" ? "complex" : "simple");
   const r = await ollamaGenerateJson(host, model, prompt);

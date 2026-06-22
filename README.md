@@ -132,7 +132,7 @@ Applies to both engines. The Local engine supports **Auto-add**, **Transient**, 
 
 ![Plan Mode modal](docs/images/plan-mode-modal.png)
 
-Ollama can also propose reviewed title chips (`T`) from tab titles when **AI title learning** is set to **Review and Save (Simple)** or **Review and Save (Complex)**. Simple uses titles only; Complex also fetches a small amount of page context before proposing chips. Proposed title chips appear in a separate title-rules section of the preview modal and are saved only when kept. Click a title chip to skip just that chip, or click the title-rule card to skip the whole proposal. Local Fresh Categories uses titles as transient clustering context but never saves title terms.
+Ollama can also propose reviewed title chips (`T`) when **AI title learning** is set to **Review and Save (Simple)** or **Review and Save (Complex)**. Simple proposes chips from tab titles only; Complex can also fetch a small amount of page context and propose chips from that content. Proposed title chips appear in a separate title-rules section of the preview modal and are saved only when kept. Click a title chip to skip just that chip, or click the title-rule card to skip the whole proposal. Local Fresh Categories uses titles as transient clustering context but never saves title terms.
 
 ### Stickiness in Auto-add / Always-add
 
@@ -148,7 +148,7 @@ In Ollama **Auto-add** (new group) and **Always-add** (existing group) modes, ta
 - **Gradient style** — choose how two-color group gradients are drawn. Left to right is the default.
 - **Minimal style** — strips the colored backgrounds and gradients from groups for a flatter look. Rule icons stay visible.
 - **Keep Ollama model warm** — preloads the model at browser startup and keeps it in VRAM between clicks. Faster, but uses VRAM continuously.
-- **AI title learning** — Ollama-only. Simple reviews tab titles; Complex also fetches page context. Reviewed title chips can be added to existing or new title-only rules during modal-confirmed rule growth.
+- **AI title learning** — Ollama-only. Simple proposes chips from tab titles; Complex can also propose chips from fetched page context. Reviewed title chips can be added to existing or new title-only rules during modal-confirmed rule growth.
 - **Local AI batch size** — only used when there are more than 75 unmatched tabs. The Local engine switches into a chunked pipeline that dedupes by hostname (one embedding per unique domain) and yields between batches so the browser stays responsive. Smaller batches = gentler on CPU, larger = faster. Above 500 unmatched tabs a confirmation modal appears before the AI pass runs.
 - **Rule reordering** — drag the handle on the left of any row in the Group Rules table to reorder rules. Order determines match priority when a hostname appears in more than one rule.
 - **Persistent collapsed groups** — collapsed/expanded state of every tab-group is saved and re-applied across browser restarts (Zen's own session save drops this).

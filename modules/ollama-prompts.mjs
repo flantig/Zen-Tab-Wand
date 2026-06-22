@@ -178,10 +178,10 @@ export const buildTitleTermPrompt = (rules, candidates, mode = "simple") => {
     return `${i}. ${c.term} — seen in titles: ${titles}${snippets}`;
   }).join("\n");
 
-  return `Assign each title keyword below to a browser rule category.
+  return `Assign each candidate title chip below to a browser rule category.
 
 Important:
-- Categorize the keyword by what it means in the page titles and context.
+- Categorize the chip by what it means in the page titles and context.
 - Do not categorize solely by the hostname or provider where the title appeared.
 - Use an existing label when it fits. Otherwise invent a short Title Case label.
 - Use "none" when the keyword is too generic or you cannot infer a useful topic.
@@ -189,10 +189,10 @@ Important:
 Existing labels:
 ${renderCategoryList(rules)}
 
-Title keywords:
+Candidate chips:
 ${candidateLines}
 
-Output ONLY a JSON object mapping each exact keyword to its chosen label or "none".
+Output ONLY a JSON object mapping each exact chip text to its chosen label or "none".
 Example:
 {
   "Commander": "Card Games",
