@@ -123,6 +123,38 @@ const cssColorFor = (color) => {
   return "";
 };
 
+const applyGroupIcon = (groupEl, icon, customIcons = readCustomIconsPref()) => {
+  const value = typeof icon === "string" ? icon.trim() : "";
+  if (!value) {
+    groupEl.style.removeProperty("--zao-tab-group-icon");
+    groupEl.style.removeProperty("--zao-tab-group-icon-url");
+    groupEl.classList.remove("zao-has-icon");
+    groupEl.classList.remove("zao-has-custom-icon");
+    return;
+  }
+
+  const custom = findCustomIcon(value, customIcons);
+  if (value.startsWith("custom:") && !custom) {
+    groupEl.style.removeProperty("--zao-tab-group-icon");
+    groupEl.style.removeProperty("--zao-tab-group-icon-url");
+    groupEl.classList.remove("zao-has-icon");
+    groupEl.classList.remove("zao-has-custom-icon");
+    return;
+  }
+
+  groupEl.classList.add("zao-has-icon");
+  if (custom) {
+    groupEl.style.removeProperty("--zao-tab-group-icon");
+    groupEl.style.setProperty("--zao-tab-group-icon-url", `url("${custom.dataUrl.replace(/"/g, '\\"')}")`);
+    groupEl.classList.add("zao-has-custom-icon");
+    return;
+  }
+
+  groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(value));
+  groupEl.style.removeProperty("--zao-tab-group-icon-url");
+  groupEl.classList.remove("zao-has-custom-icon");
+};
+
 export const applyGroupAppearance = (groupEl, rule) => {
   if (!groupEl?.isConnected || !rule) return;
   const customIcons = readCustomIconsPref();
@@ -141,31 +173,7 @@ export const applyGroupAppearance = (groupEl, rule) => {
       groupEl.classList.remove("zao-has-gradient");
     }
 
-    const icon = typeof rule.icon === "string" ? rule.icon.trim() : "";
-    if (icon) {
-      const custom = findCustomIcon(icon, customIcons);
-      if (icon.startsWith("custom:") && !custom) {
-        groupEl.style.removeProperty("--zao-tab-group-icon");
-        groupEl.style.removeProperty("--zao-tab-group-icon-url");
-        groupEl.classList.remove("zao-has-icon");
-        groupEl.classList.remove("zao-has-custom-icon");
-      } else if (custom) {
-        groupEl.classList.add("zao-has-icon");
-        groupEl.style.removeProperty("--zao-tab-group-icon");
-        groupEl.style.setProperty("--zao-tab-group-icon-url", `url("${custom.dataUrl.replace(/"/g, '\\"')}")`);
-        groupEl.classList.add("zao-has-custom-icon");
-      } else {
-        groupEl.classList.add("zao-has-icon");
-        groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(icon));
-        groupEl.style.removeProperty("--zao-tab-group-icon-url");
-        groupEl.classList.remove("zao-has-custom-icon");
-      }
-    } else {
-      groupEl.style.removeProperty("--zao-tab-group-icon");
-      groupEl.style.removeProperty("--zao-tab-group-icon-url");
-      groupEl.classList.remove("zao-has-icon");
-      groupEl.classList.remove("zao-has-custom-icon");
-    }
+    applyGroupIcon(groupEl, rule.icon, customIcons);
   } catch (e) {
     console.error(`${LOG} applyGroupAppearance failed:`, e);
   }
@@ -219,33 +227,7 @@ export const syncAllGroupColors = (workspaceId, rules, root = document) => {
     if (minimal) {
       groupEl.classList.add("zao-minimal");
       clearGroupColor(groupEl);
-      const icon = typeof ruleByName.get(label)?.icon === "string"
-        ? ruleByName.get(label).icon.trim()
-        : "";
-      if (icon) {
-        const custom = findCustomIcon(icon, customIcons);
-        if (icon.startsWith("custom:") && !custom) {
-          groupEl.style.removeProperty("--zao-tab-group-icon");
-          groupEl.style.removeProperty("--zao-tab-group-icon-url");
-          groupEl.classList.remove("zao-has-icon");
-          groupEl.classList.remove("zao-has-custom-icon");
-        } else if (custom) {
-          groupEl.classList.add("zao-has-icon");
-          groupEl.style.removeProperty("--zao-tab-group-icon");
-          groupEl.style.setProperty("--zao-tab-group-icon-url", `url("${custom.dataUrl.replace(/"/g, '\\"')}")`);
-          groupEl.classList.add("zao-has-custom-icon");
-        } else {
-          groupEl.classList.add("zao-has-icon");
-          groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(icon));
-          groupEl.style.removeProperty("--zao-tab-group-icon-url");
-          groupEl.classList.remove("zao-has-custom-icon");
-        }
-      } else {
-        groupEl.style.removeProperty("--zao-tab-group-icon");
-        groupEl.style.removeProperty("--zao-tab-group-icon-url");
-        groupEl.classList.remove("zao-has-icon");
-        groupEl.classList.remove("zao-has-custom-icon");
-      }
+      applyGroupIcon(groupEl, ruleByName.get(label)?.icon, customIcons);
     } else {
       groupEl.classList.remove("zao-minimal");
       if (ruleByName.has(label)) applyGroupAppearance(groupEl, ruleByName.get(label));

@@ -35,6 +35,8 @@ For hex, the setter would write `var(--tab-group-color-#abc)` which is undefined
 
 `icon` is optional. Emoji/text icons are stored as `--zao-tab-group-icon`; uploaded custom icons store a `custom:<id>` reference and render via `--zao-tab-group-icon-url`. Missing custom icon references render as no icon. Minimal style clears colors/gradients but keeps the icon.
 
+`applyGroupAppearance` and minimal-style sync both route icon updates through one helper so emoji/custom/missing-icon behavior stays identical in normal and minimal modes.
+
 ## Stale group cleanup is destructive
 
 `dissolveStaleGroups` removes any group whose label doesn't match a rule — including user-created ones the user might want to keep. To protect a manual group, add a same-named row to the rules table (the domains array can stay empty).

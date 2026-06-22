@@ -64,7 +64,7 @@ const SECTION_DESCRIPTIONS = [
   ],
   [
     "Backup & Restore",
-    "Export your rules and skip list as JSON for safekeeping, or import a previously-saved file to restore them.",
+    "Export your rules, skip list, and custom icons as JSON for safekeeping, or import a previously-saved file to restore them.",
   ],
   [
     "Look & Feel",

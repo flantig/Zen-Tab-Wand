@@ -672,7 +672,7 @@ export const buildCustomIconsEditor = () => {
 //
 // Export shape (v1):  { "rules": [...], "skipDomains": [...], "customIcons": [...] }
 // Import accepts:
-//   • that object shape (overwrites both prefs)
+//   • that object shape (overwrites whichever prefs are present)
 //   • a bare array (treated as rules-only, for backwards compat with v0 exports)
 // ──────────────────────────────────────────────────────────────────────────────
 export const buildBackupRestoreSection = () => {
@@ -682,7 +682,7 @@ export const buildBackupRestoreSection = () => {
 
   const exportBtn = h("button", { class: "zao-backup-btn", text: "Export" });
   exportBtn.type = "button";
-  exportBtn.title = "Download current rules + skip-domains as a JSON file";
+  exportBtn.title = "Download current rules, skip domains, and custom icons as a JSON file";
   exportBtn.addEventListener("click", async () => {
     const payload = {
       // keepIncomplete: true so a user's in-progress rules are included in
@@ -763,7 +763,7 @@ export const buildBackupRestoreSection = () => {
 
   const importBtn = h("button", { class: "zao-backup-btn", text: "Import…" });
   importBtn.type = "button";
-  importBtn.title = "Replace rules + skip-domains from a JSON file";
+  importBtn.title = "Replace rules, skip domains, and custom icons from a JSON file";
   importBtn.addEventListener("click", () => {
     const picker = document.createElementNS("http://www.w3.org/1999/xhtml", "input");
     picker.type = "file";
@@ -787,7 +787,7 @@ export const buildBackupRestoreSection = () => {
           if (Array.isArray(parsed.skipDomains)) importedSkip = parsed.skipDomains;
           if (Array.isArray(parsed.customIcons)) importedIcons = parsed.customIcons;
         } else {
-          throw new Error("Top-level must be an array or { rules, skipDomains } object");
+          throw new Error("Top-level must be an array or { rules, skipDomains, customIcons } object");
         }
         if (!importedRules && !importedSkip && !importedIcons) throw new Error("Nothing to import (no rules, skipDomains, or customIcons found)");
 
