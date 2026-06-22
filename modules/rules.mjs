@@ -2,7 +2,15 @@
 // Reads/writes the rules JSON pref, validates rules.json file contents, and exposes
 // the precedence chain (pref > file > built-in defaults).
 
-import { CONFIG, DEFAULT_RULES, LOG, ZEN_COLOR_NAMES, isValidHex } from "./config.mjs";
+import {
+  CONFIG,
+  DEFAULT_GRADIENT_STYLE,
+  DEFAULT_RULES,
+  GRADIENT_STYLES,
+  LOG,
+  ZEN_COLOR_NAMES,
+  isValidHex,
+} from "./config.mjs";
 
 const cleanStringList = (value) =>
   Array.isArray(value)
@@ -208,6 +216,14 @@ export const getMatchMode = () => {
     }
   } catch {}
   return "url-then-title";
+};
+
+export const getGradientStyle = () => {
+  try {
+    const style = Services.prefs.getStringPref(CONFIG.GRADIENT_STYLE_PREF, DEFAULT_GRADIENT_STYLE);
+    if (Object.prototype.hasOwnProperty.call(GRADIENT_STYLES, style)) return style;
+  } catch {}
+  return DEFAULT_GRADIENT_STYLE;
 };
 
 // Which AI engine is selected. Returns one of: "off" | "local" | "ollama".

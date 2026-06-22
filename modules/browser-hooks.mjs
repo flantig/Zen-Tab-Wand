@@ -14,7 +14,7 @@
 //
 // Remaining DOM hook + observer in this file:
 //   TabGroupCreate   — re-apply rule colors when Zen restores groups on startup.
-//   minimal-style    — re-run syncAllGroupColors when the user toggles the pref.
+//   appearance prefs — re-run syncAllGroupColors when the user changes styling.
 //
 // On DOM hooks we stash the installed handler back onto its host element as a
 // `_zaoXxxHook` expando. This prevents double-install if the entry script is
@@ -22,7 +22,16 @@
 
 import { CONFIG, LOG, BUILD_VERSION, isZenColorName, isUnsetLabel } from "./config.mjs";
 import { getTabUrl, getHostname } from "./tabs.mjs";
-import { readRulesPref, writeRulesPref, readSkipDomainsPref, writeSkipDomainsPref, readCollapsedGroupsPref, writeCollapsedGroupsPref, isMinimalStyle } from "./rules.mjs";
+import {
+  getGradientStyle,
+  isMinimalStyle,
+  readCollapsedGroupsPref,
+  readRulesPref,
+  readSkipDomainsPref,
+  writeCollapsedGroupsPref,
+  writeRulesPref,
+  writeSkipDomainsPref,
+} from "./rules.mjs";
 import { applyGroupAppearance, syncAllGroupColors, moveTabsToTop } from "./groups.mjs";
 
 // ─── Helpers (module level so they're reusable + easy to find) ───────────────
@@ -451,43 +460,51 @@ export const setupCollapsedStatePersistence = () => {
 
 // ─── Pref observers ──────────────────────────────────────────────────────────
 
-// Live re-apply of group styling when the user toggles the minimal-style pref.
-// Without this the change is invisible until the next tidy-click.
+// Live re-apply of group styling when the user changes Look & Feel appearance
+// prefs. Without this the change is invisible until the next tidy-click.
 //
 // Services.prefs.addObserver attaches to the *global* prefs service (lives in the
 // parent process) and would survive window close, leaking a window reference if
 // we don't remove it. Hence the explicit teardown — wired into the entry
 // script's cleanup() handler.
 let minimalStylePrefObserver = null;
+const APPEARANCE_PREFS = [
+  CONFIG.MINIMAL_STYLE_PREF,
+  CONFIG.GRADIENT_STYLE_PREF,
+];
 
 export const setupMinimalStylePrefObserver = () => {
   if (minimalStylePrefObserver) return;
   minimalStylePrefObserver = {
     observe(_subject, topic, data) {
       if (topic !== "nsPref:changed") return;
-      if (data !== CONFIG.MINIMAL_STYLE_PREF) return;
+      if (!APPEARANCE_PREFS.includes(data)) return;
       try {
         // Pass null so we walk every workspace's tab-groups — minimal-style is a
-        // global pref and a user toggling it expects the change to apply everywhere,
+        // global pref and a user changing appearance expects it to apply everywhere,
         // not just whichever workspace happens to be active at the moment.
         const rules = readRulesPref() || [];
         const touched = syncAllGroupColors(null, rules);
-        console.log(`${LOG} minimal-style toggled → resynced ${touched} group(s) across all workspaces (minimal=${isMinimalStyle()})`);
+        console.log(`${LOG} appearance pref changed (${data}) → resynced ${touched} group(s) across all workspaces (minimal=${isMinimalStyle()}, gradient=${getGradientStyle()})`);
       } catch (e) {
-        console.error(`${LOG} minimal-style pref observer error:`, e);
+        console.error(`${LOG} appearance pref observer error:`, e);
       }
     },
   };
-  Services.prefs.addObserver(CONFIG.MINIMAL_STYLE_PREF, minimalStylePrefObserver);
-  console.log(`${LOG} minimal-style pref observer installed`);
+  for (const prefName of APPEARANCE_PREFS) {
+    Services.prefs.addObserver(prefName, minimalStylePrefObserver);
+  }
+  console.log(`${LOG} appearance pref observer installed`);
 };
 
 export const teardownMinimalStylePrefObserver = () => {
   if (!minimalStylePrefObserver) return;
-  try {
-    Services.prefs.removeObserver(CONFIG.MINIMAL_STYLE_PREF, minimalStylePrefObserver);
-  } catch (e) {
-    console.warn(`${LOG} failed to remove minimal-style pref observer:`, e);
+  for (const prefName of APPEARANCE_PREFS) {
+    try {
+      Services.prefs.removeObserver(prefName, minimalStylePrefObserver);
+    } catch (e) {
+      console.warn(`${LOG} failed to remove appearance pref observer for ${prefName}:`, e);
+    }
   }
   minimalStylePrefObserver = null;
 };

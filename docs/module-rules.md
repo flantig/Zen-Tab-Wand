@@ -14,6 +14,7 @@ All read/write access to the rules pref + the file fallback. Cleans malformed in
 | `isMinimalStyle()` | bool | Reads the `minimal-style` pref. |
 | `isStrictRulesEnforced()` | bool | Reads the `strict-rules` pref (default false). When on, click-handler ejects tabs that do not match their current group under the active match mode. |
 | `getMatchMode()` | `"url-only" \| "title-only" \| "url-then-title" \| "title-then-url"` | Reads the global URL/title matching priority. Unknown values fall back to `"url-then-title"`. |
+| `getGradientStyle()` | string | Reads the global two-color gradient style. Unknown values fall back to `"left-right"`. |
 | `readSkipDomainsPref()` | `string[]` | Reads the JSON skip-domains pref. Returns `[]` if unset. |
 | `writeSkipDomainsPref(domains)` | void | Serializes and stores the skip-domains list. |
 | `getAIEngine()` | `"off" \| "local" \| "ollama"` | Normalized read of the engine pref (unknown / empty → `"off"`). |

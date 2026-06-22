@@ -143,6 +143,7 @@ In Ollama **Auto-add** (new group) and **Always-add** (existing group) modes, ta
 - **Custom Icons** — upload local image icons and manage the custom-only picker list. Recommended 128x128; uploaded icons are resized if different, stored locally, and can be assigned from the rule icon picker.
 ![Custom Icon Upload](docs/images/custom-emoji.png)
 - **Strict rule enforcement** — when on, tabs sitting inside a group without any currently matching rule get ejected to the top on every wand click. It uses the active Rule matching priority, so title-only mode enforces title matches instead of domain matches. Off by default.
+- **Gradient style** — choose how two-color group gradients are drawn. Left to right is the default.
 - **Minimal style** — strips the colored backgrounds and gradients from groups for a flatter look. Rule icons stay visible.
 - **Keep Ollama model warm** — preloads the model at browser startup and keeps it in VRAM between clicks. Faster, but uses VRAM continuously.
 - **Local AI batch size** — only used when there are more than 75 unmatched tabs. The Local engine switches into a chunked pipeline that dedupes by hostname (one embedding per unique domain) and yields between batches so the browser stays responsive. Smaller batches = gentler on CPU, larger = faster. Above 500 unmatched tabs a confirmation modal appears before the AI pass runs.

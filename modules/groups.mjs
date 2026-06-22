@@ -2,9 +2,9 @@
 // color application (named via Zen API; hex via CSS variable overrides), and the
 // sort-ungrouped-to-top pass.
 
-import { CONFIG, LOG, bgForName, isZenColorName, isValidHex } from "./config.mjs";
+import { CONFIG, GRADIENT_STYLES, LOG, bgForName, isZenColorName, isValidHex } from "./config.mjs";
 import { findCustomIcon, readCustomIconsPref } from "./custom-icons.mjs";
-import { isMinimalStyle } from "./rules.mjs";
+import { getGradientStyle, isMinimalStyle } from "./rules.mjs";
 
 // Find an existing tab-group with the given label in the given workspace.
 // Tries direct attribute match first (which doesn't always work because Zen doesn't
@@ -123,6 +123,9 @@ const cssColorFor = (color) => {
   return "";
 };
 
+const gradientFor = (color1, color2) =>
+  GRADIENT_STYLES[getGradientStyle()](color1, color2);
+
 const applyGroupIcon = (groupEl, icon, customIcons = readCustomIconsPref()) => {
   const value = typeof icon === "string" ? icon.trim() : "";
   if (!value) {
@@ -166,7 +169,7 @@ export const applyGroupAppearance = (groupEl, rule) => {
     const color1 = cssColorFor(rule.color);
     const color2 = cssColorFor(rule.color2);
     if (color1 && color2) {
-      groupEl.style.setProperty("--zao-tab-group-gradient", `linear-gradient(90deg, ${color1}, ${color2})`);
+      groupEl.style.setProperty("--zao-tab-group-gradient", gradientFor(color1, color2));
       groupEl.classList.add("zao-has-gradient");
     } else {
       groupEl.style.removeProperty("--zao-tab-group-gradient");

@@ -52,6 +52,7 @@ export const CONFIG = {
   MINIMAL_STYLE_PREF: "extensions.zen-auto-organize.minimal-style",
   STRICT_RULES_PREF: "extensions.zen-auto-organize.strict-rules",
   MATCH_MODE_PREF: "extensions.zen-auto-organize.match-mode",
+  GRADIENT_STYLE_PREF: "extensions.zen-auto-organize.gradient-style",
 
   // AI Sorting (Pass 2). Engine governed by AI_ENGINE_PREF:
   //   "off"    — no AI pass
@@ -134,6 +135,17 @@ export const PRESET_COLORS = [
 
 export const ZEN_COLOR_NAMES = new Set(PRESET_COLORS.map((c) => c.name));
 export const HEX_BY_NAME = new Map(PRESET_COLORS.map((c) => [c.name, c.hex]));
+
+export const GRADIENT_STYLES = {
+  "left-right": (a, b) => `linear-gradient(90deg, ${a}, ${b})`,
+  "right-left": (a, b) => `linear-gradient(270deg, ${a}, ${b})`,
+  "top-bottom": (a, b) => `linear-gradient(180deg, ${a}, ${b})`,
+  "bottom-top": (a, b) => `linear-gradient(0deg, ${a}, ${b})`,
+  "diagonal-down": (a, b) => `linear-gradient(135deg, ${a}, ${b})`,
+  "diagonal-up": (a, b) => `linear-gradient(45deg, ${a}, ${b})`,
+  "radial": (a, b) => `radial-gradient(circle at center, ${a}, ${b})`,
+};
+export const DEFAULT_GRADIENT_STYLE = "left-right";
 
 export const isValidHex = (s) => typeof s === "string" && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(s);
 export const isZenColorName = (s) => typeof s === "string" && ZEN_COLOR_NAMES.has(s);

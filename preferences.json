@@ -42,6 +42,21 @@
       { "label": "Title then URL", "value": "title-then-url" }
     ]
   },
+  {
+    "type": "dropdown",
+    "label": "Gradient style — choose how two-color group gradients are drawn",
+    "property": "extensions.zen-auto-organize.gradient-style",
+    "defaultValue": "left-right",
+    "options": [
+      { "label": "Left to right", "value": "left-right" },
+      { "label": "Right to left", "value": "right-left" },
+      { "label": "Top to bottom", "value": "top-bottom" },
+      { "label": "Bottom to top", "value": "bottom-top" },
+      { "label": "Diagonal down", "value": "diagonal-down" },
+      { "label": "Diagonal up", "value": "diagonal-up" },
+      { "label": "Radial", "value": "radial" }
+    ]
+  },
 
   {
     "type": "separator",

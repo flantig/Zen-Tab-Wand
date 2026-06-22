@@ -47,8 +47,8 @@ Fires when any tab-group element connects to the DOM — including ALL groups re
 
 This is why custom rule colors, gradients, and icons survive across Zen restarts even when Zen's session storage forgets them.
 
-## minimal-style pref observer
+## Appearance pref observer
 
 `Services.prefs.addObserver` attaches to the global prefs branch and would survive window close (leaking a window reference) if we didn't tear it down. The observer is installed in `setupMinimalStylePrefObserver` and removed in `teardownMinimalStylePrefObserver`, wired into the entry script's `cleanup()`.
 
-On change, it calls `syncAllGroupColors(null, rules)` (null = walk every workspace, not just the active one) so the minimal-style change is visible everywhere immediately.
+On minimal-style or gradient-style changes, it calls `syncAllGroupColors(null, rules)` (null = walk every workspace, not just the active one) so appearance changes are visible everywhere immediately.
