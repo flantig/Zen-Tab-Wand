@@ -283,6 +283,14 @@ const closeCustomDropdowns = (dialog, except = null) => {
 const selectedDropdownOption = (config, value) =>
   config.options.find(([v]) => v === value) || config.options.find(([v]) => v === config.defaultValue) || config.options[0];
 
+const updateCustomDropdownMenuWidth = (wrap) => {
+  if (!wrap) return;
+  const labels = [...wrap.querySelectorAll(".zao-custom-dropdown-item:not(.zao-option-hidden)")]
+    .map((item) => item.dataset.fullLabel || item.textContent || "");
+  const longest = labels.reduce((n, label) => Math.max(n, label.length), 16);
+  wrap.style.setProperty("--zao-dropdown-menu-ch", String(Math.min(longest, 92)));
+};
+
 const syncCustomDropdown = (dialog, prefName) => {
   const row = findPrefRow(dialog, prefName);
   const wrap = row?.querySelector(".zao-custom-dropdown");
@@ -301,6 +309,7 @@ const syncCustomDropdown = (dialog, prefName) => {
     item.classList.toggle("zao-selected", isSelected);
     item.setAttribute("aria-selected", isSelected ? "true" : "false");
   }
+  updateCustomDropdownMenuWidth(wrap);
 };
 
 const installCustomDropdown = (dialog, prefName) => {
@@ -480,6 +489,7 @@ const setNewGroupOptionsForEngine = (dialog, engine) => {
       item.disabled = hidden;
       item.setAttribute("aria-hidden", hidden ? "true" : "false");
     }
+    updateCustomDropdownMenuWidth(custom);
     syncCustomDropdown(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF);
   }
 };

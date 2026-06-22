@@ -192,12 +192,12 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   display: none;
   position: absolute;
   z-index: 10000;
-  inset-inline-start: 0;
+  inset-inline-end: 0;
   top: calc(100% + 4px);
   box-sizing: border-box;
-  min-width: min(100%, calc(100vw - 48px));
-  width: min(760px, calc(100vw - 48px));
-  max-width: calc(100vw - 48px);
+  min-width: 100%;
+  width: min(calc((var(--zao-dropdown-menu-ch, 32) * 1ch) + 72px), calc(100vw - 48px));
+  max-width: min(760px, calc(100vw - 48px));
   max-height: min(360px, 55vh);
   overflow-y: auto;
   overflow-x: hidden;
@@ -223,8 +223,7 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   color: CanvasText;
   font: inherit;
   text-align: start;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .zao-custom-dropdown-item:hover,
