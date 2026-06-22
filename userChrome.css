@@ -103,10 +103,28 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   display: none !important;
 }
 
+.zao-control-row,
+.zao-action-pref {
+  --zao-pref-label-column: minmax(340px, 620px);
+}
+
+.zao-control-row {
+  display: grid !important;
+  grid-template-columns: var(--zao-pref-label-column) auto !important;
+  justify-content: start !important;
+  column-gap: 16px !important;
+  align-items: center !important;
+}
+
+.zao-control-row > :last-child {
+  justify-self: start !important;
+}
+
 .zao-checkbox-right {
   display: grid !important;
-  grid-template-columns: minmax(0, 1fr) auto !important;
-  column-gap: 12px !important;
+  grid-template-columns: var(--zao-pref-label-column) auto !important;
+  justify-content: start !important;
+  column-gap: 16px !important;
   align-items: center !important;
 }
 
@@ -217,8 +235,10 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 
 .zao-action-pref {
   display: grid !important;
-  grid-template-columns: minmax(0, 1fr) auto !important;
-  gap: 8px !important;
+  grid-template-columns: var(--zao-pref-label-column) auto !important;
+  justify-content: start !important;
+  column-gap: 16px !important;
+  row-gap: 8px !important;
   align-items: center !important;
   padding: 6px 2px !important;
 }
@@ -237,7 +257,7 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 
 .zao-action-pref-actions {
   display: flex !important;
-  justify-content: flex-end !important;
+  justify-content: flex-start !important;
   gap: 8px !important;
   flex-wrap: wrap !important;
 }
@@ -258,6 +278,7 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 }
 
 @media (max-width: 520px) {
+  .zao-control-row,
   .zao-action-pref {
     grid-template-columns: 1fr !important;
   }

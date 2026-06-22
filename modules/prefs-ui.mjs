@@ -169,7 +169,25 @@ const CHECKBOX_RIGHT_PREFS = [
   CONFIG.AI_OLLAMA_WARMUP_PREF,
 ];
 
-const alignCheckboxRows = (dialog) => {
+const CONTROL_ROW_PREFS = [
+  CONFIG.MINIMAL_STYLE_PREF,
+  CONFIG.STRICT_RULES_PREF,
+  CONFIG.MATCH_MODE_PREF,
+  CONFIG.AI_ENGINE_PREF,
+  CONFIG.AI_EXISTING_BEHAVIOR_PREF,
+  CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF,
+  CONFIG.AI_OLLAMA_HOST_PREF,
+  CONFIG.AI_OLLAMA_MODEL_PREF,
+  CONFIG.AI_OLLAMA_WARMUP_PREF,
+  CONFIG.AI_LOCAL_BATCH_SIZE_PREF,
+];
+
+const alignSettingRows = (dialog) => {
+  for (const prefName of CONTROL_ROW_PREFS) {
+    const row = findPrefRow(dialog, prefName);
+    if (!row) continue;
+    row.classList.add("zao-control-row");
+  }
   for (const prefName of CHECKBOX_RIGHT_PREFS) {
     const row = findPrefRow(dialog, prefName);
     if (!row) continue;
@@ -177,7 +195,7 @@ const alignCheckboxRows = (dialog) => {
     const checkbox = row.querySelector('input[type="checkbox"], checkbox, [role="checkbox"]');
     if (checkbox) {
       checkbox.classList.add("zao-checkbox-control");
-      if (checkbox.parentElement === row && row.lastElementChild !== checkbox) {
+      if (row.lastElementChild !== checkbox) {
         row.appendChild(checkbox);
       }
     }
@@ -228,7 +246,7 @@ const updateConditionalFields = (dialog) => {
   setHidden(findPrefRow(dialog, CONFIG.AI_OLLAMA_MODEL_PREF),       engine !== "ollama");
   setHidden(findPrefRow(dialog, CONFIG.AI_OLLAMA_WARMUP_PREF),      engine !== "ollama");
   setHidden(findPrefRow(dialog, CONFIG.AI_LOCAL_BATCH_SIZE_PREF),   !isLocalOrOllama);
-  alignCheckboxRows(dialog);
+  alignSettingRows(dialog);
 };
 
 // First-time AI engine warning modals.
