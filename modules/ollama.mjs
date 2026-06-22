@@ -47,10 +47,12 @@ const stripMetaPrefix = (s) => s
 
 const TITLE_TERM_LIMIT = 3;
 const TITLE_TERM_STOPWORDS = new Set([
-  "about", "after", "again", "all", "and", "are", "best", "blog", "can",
-  "com", "for", "from", "guide", "home", "how", "into", "latest", "login",
-  "news", "official", "page", "pages", "post", "read", "reddit", "search",
-  "site", "the", "this", "tips", "today", "with", "you", "your",
+  "about", "after", "again", "all", "and", "are", "article", "best", "blog",
+  "buy", "can", "com", "content", "for", "from", "guide", "home", "how",
+  "into", "latest", "login", "news", "official", "online", "order", "page",
+  "pages", "post", "read", "reddit", "search", "share", "site", "the", "this",
+  "tips", "today", "topic", "type", "upload", "video", "website", "with",
+  "you", "your",
 ]);
 
 const titleTokens = (title) => {
@@ -69,6 +71,15 @@ const isUsefulTitleToken = (token, hostname = "") => {
   if (/^\d+$/.test(norm)) return false;
   if (hostname && normalizeTitleTerm(hostname).split(".").includes(norm)) return false;
   return true;
+};
+
+const looksDistinctive = (token) => {
+  const text = String(token || "");
+  const norm = normalizeTitleTerm(text);
+  if (text.length >= 4 && text === text.toLocaleUpperCase() && /[A-Z]/.test(text)) return true;
+  if (/^[A-Z][a-z]+(?:[-'][A-Z]?[a-z]+)*$/.test(text)) return true;
+  if (norm.length >= 6 && /[a-z]/.test(norm)) return true;
+  return false;
 };
 
 const allPlanGroups = (plan) => {
@@ -169,13 +180,14 @@ const collectTitleTermCandidates = async (plan, rules, mode) => {
         const key = normalizeTitleTerm(term);
         if (existingTerms.has(key) || seenInSnippet.has(key)) continue;
         seenInSnippet.add(key);
+        if (!looksDistinctive(term)) continue;
         addTitleCandidate(byKey, existingTerms, group, tab, term, snippet);
       }
     }
   }
 
   return [...byKey.values()]
-    .filter((c) => c.count >= 2 || c.hosts.size >= 2 || c.snippets.size > 0)
+    .filter((c) => c.count >= 2 || c.hosts.size >= 2 || (c.snippets.size > 0 && looksDistinctive(c.term)))
     .sort((a, b) =>
       (b.hosts.size - a.hosts.size) ||
       (b.count - a.count) ||

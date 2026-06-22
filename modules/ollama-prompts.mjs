@@ -183,6 +183,7 @@ export const buildTitleTermPrompt = (rules, candidates, mode = "simple") => {
 Important:
 - Categorize the chip by what it means in the page titles and context.
 - Do not categorize solely by the hostname or provider where the title appeared.
+- Prefer distinctive nouns, names, acronyms, products, projects, fandoms, topics, or technologies over generic page/action words.
 - Use an existing label when it fits. Otherwise invent a short Title Case label.
 - Use "none" when the keyword is too generic or you cannot infer a useful topic.
 
