@@ -76,7 +76,7 @@
   },
   {
     "type": "dropdown",
-    "label": "AI title learning — propose reviewed T chips from tab titles",
+    "label": "AI title learning — propose reviewed T chips from tab titles (simple) and/or page content (complex)",
     "property": "extensions.zen-auto-organize.ai-title-learning",
     "defaultValue": "off",
     "options": [
