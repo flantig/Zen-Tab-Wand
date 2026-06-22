@@ -121,48 +121,6 @@ const findPrefRow = (dialog, prefName) => {
   return dialog.querySelector(`#${CSS.escape(id)}`);
 };
 
-// Subset of new-group-behavior values that are meaningful on the Local engine.
-// Mirrors the same 3-way pattern as the existing-behavior dropdown:
-//   - auto-add        → save the cluster as a rule (hostname-derived name)
-//   - transient       → apply the move, don't write a rule
-//   - fresh-categories → re-tidy ALL tabs into clusters, ignoring rules
-// The other Ollama values (prompt / identify-only) require LLM-style semantic
-// output (Zen edit modal expects a meaningful name; Plan Mode review is only
-// useful when the names mean something abstract) so they're hidden on Local.
-const LOCAL_NEW_GROUP_BEHAVIORS = new Set(["auto-add", "transient", "fresh-categories"]);
-
-// Hide individual dropdown options based on a whitelist of valid values.
-// Sine's settings page is HTML (not XUL), so it renders dropdowns as either
-// native <option> elements OR custom elements (e.g. <li> with data-value).
-// We try multiple selectors and report what we found so a missing-selector
-// case is debuggable.
-const filterDropdownOptions = (row, validValues) => {
-  if (!row) return;
-  // Try every selector we've ever seen Sine use. value-bearing children only.
-  const items = [
-    ...row.querySelectorAll("option"),
-    ...row.querySelectorAll("menuitem"),
-    ...row.querySelectorAll("[data-value]"),
-    ...row.querySelectorAll('[role="option"]'),
-  ];
-  if (items.length === 0) {
-    console.warn(
-      `${LOG} filterDropdownOptions: NO option-like children under row`,
-      row,
-      "innerHTML sample:",
-      (row.innerHTML || "").slice(0, 400)
-    );
-    return;
-  }
-  for (const item of items) {
-    const v = item.getAttribute("value") || item.getAttribute("data-value");
-    if (v == null) continue;
-    const allow = validValues.has(v);
-    item.hidden = !allow;
-    item.style.display = allow ? "" : "none";
-  }
-};
-
 const CHECKBOX_RIGHT_PREFS = [
   CONFIG.MINIMAL_STYLE_PREF,
   CONFIG.STRICT_RULES_PREF,
@@ -249,26 +207,6 @@ const updateConditionalFields = (dialog) => {
   setHidden(findPrefRow(dialog, CONFIG.AI_TITLE_LEARNING_PREF), engine !== "ollama");
   const newGroupBehaviorRow = findPrefRow(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF);
   setHidden(newGroupBehaviorRow, !isLocalOrOllama);
-  if (engine === "local") {
-    filterDropdownOptions(newGroupBehaviorRow, LOCAL_NEW_GROUP_BEHAVIORS);
-    // If the user previously had an Ollama-only behavior selected (e.g.
-    // prompt / identify-only), force it back to a valid Local value so the
-    // dropdown doesn't display a now-hidden selection.
-    try {
-      const current = Services.prefs.getStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "");
-      if (current && !LOCAL_NEW_GROUP_BEHAVIORS.has(current)) {
-        console.log(`${LOG} new-group-behavior "${current}" not valid on Local — resetting to "transient"`);
-        Services.prefs.setStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "transient");
-      }
-    } catch (e) {
-      console.error(`${LOG} failed to reset new-group-behavior pref:`, e);
-    }
-  } else if (engine === "ollama") {
-    // Restore all options for Ollama (whitelist matches preferences.json).
-    filterDropdownOptions(newGroupBehaviorRow,
-      new Set(["auto-add", "transient", "prompt", "fresh-categories", "identify-only"])
-    );
-  }
   setHidden(findPrefRow(dialog, CONFIG.AI_OLLAMA_HOST_PREF),        engine !== "ollama");
   setHidden(findPrefRow(dialog, CONFIG.AI_OLLAMA_MODEL_PREF),       engine !== "ollama");
   setHidden(findPrefRow(dialog, CONFIG.AI_OLLAMA_WARMUP_PREF),      engine !== "ollama");
