@@ -31,6 +31,7 @@ After install, a wand icon appears in your toolbar's workspace separator. Left-c
 2. Edit the **Group Rules** table to your liking. Each group needs a name and one or more match chips: `@` chips for domains (e.g. `github.com`) and `T` chips for page-title keywords. Colors, gradients, and icons are optional.
 
 ![Choosing to filter by domain or title](docs/images/domain-title.png)
+
 3. Click the **wand button** in the toolbar. Your matching tabs are sorted instantly.
 4. (Optional) Pick an **AI engine** for tabs the rules don't cover — see below.
 
