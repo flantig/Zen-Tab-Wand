@@ -209,6 +209,15 @@ const readSelectedAIEngineFromDialog = (dialog) => {
   const row = findPrefRow(dialog, CONFIG.AI_ENGINE_PREF);
   if (!row) return "";
 
+  for (const control of row.querySelectorAll("select, menulist, button, input")) {
+    const value = normalizeAIEngineValue(control.value || control.getAttribute?.("value"));
+    if (value) return value;
+    const label = normalizeAIEngineValue(control.label || control.getAttribute?.("label"));
+    if (label) return label;
+    const text = normalizeAIEngineValue(control.textContent);
+    if (text) return text;
+  }
+
   const selected = row.querySelector(
     "option:checked, [selected], [aria-selected='true'], [data-selected='true']"
   );
@@ -218,15 +227,6 @@ const readSelectedAIEngineFromDialog = (dialog) => {
     selected?.textContent
   );
   if (selectedValue) return selectedValue;
-
-  for (const control of row.querySelectorAll("select, menulist, button, input")) {
-    const value = normalizeAIEngineValue(control.value || control.getAttribute?.("value"));
-    if (value) return value;
-    const label = normalizeAIEngineValue(control.label || control.getAttribute?.("label"));
-    if (label) return label;
-    const text = normalizeAIEngineValue(control.textContent);
-    if (text) return text;
-  }
 
   return "";
 };
