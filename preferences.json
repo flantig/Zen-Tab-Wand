@@ -88,12 +88,12 @@
   },
   {
     "type": "dropdown",
-    "label": "When AI assigns a tab to an existing group",
+    "label": "Existing AI matches — choose whether matched tabs update saved rules",
     "property": "extensions.zen-auto-organize.ai-existing-behavior",
     "defaultValue": "always-add",
     "options": [
-      { "label": "Always-add — Append the tab's domain to the matched rule (rules grow)", "value": "always-add" },
-      { "label": "Transient — Move the tab only, rules untouched", "value": "transient" }
+      { "label": "Move + Save Domain — Move the tab and add its domain to the matched rule", "value": "always-add" },
+      { "label": "Move Once — Move the tab now; do not update saved rules", "value": "transient" }
     ]
   },
   {

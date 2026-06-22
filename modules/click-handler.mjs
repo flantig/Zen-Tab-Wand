@@ -358,7 +358,7 @@ export const handleOrganizeClick = async () => {
           //   - Preview Only (identify-only) → always show (it IS the modal mode);
           //     applies to BOTH engines (local Fresh is hostname-named so the
           //     modal lets the user rename / re-assign before applying)
-          //   - Preview + Save Rule / Always-add → show so user can veto rule mutations
+          //   - Preview + Save Rule / Move + Save Domain → show so user can veto rule mutations
           //     before they hit the rules table. Ollama-only — those modes imply
           //     LLM-style semantic naming.
           //   - Group Once (either) → no modal (it's just a temp move per user)
@@ -373,7 +373,7 @@ export const handleOrganizeClick = async () => {
           } else if (aiEngine === "ollama" && !isFreshMode && newGroupBehavior !== "prompt") {
             const existingBehavior = getAIExistingBehavior();
             const flags = [];
-            if (existingBehavior === "always-add") flags.push("Always-add");
+            if (existingBehavior === "always-add") flags.push("Move + Save Domain");
             if (newGroupBehavior === "auto-add") flags.push("Preview + Save Rule");
             if (flags.length > 0) {
               showModal = true;

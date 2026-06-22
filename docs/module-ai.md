@@ -71,8 +71,8 @@ unmatched tabs (from runPass1)
 
 | Value | Effect |
 |---|---|
-| `always-add` (default) | Move the tab AND append its hostname to the rule's `domains[]`. Rules grow over time. |
-| `transient` | Move the tab only. Rules untouched — next click would have to re-classify the same tabs. |
+| `always-add` / Move + Save Domain (default) | Move the tab AND append its hostname to the rule's `domains[]`. Rules grow over time. |
+| `transient` / Move Once | Move the tab only. Rules untouched — next click would have to re-classify the same tabs. |
 
 ### Local Fresh title context
 

@@ -2,7 +2,7 @@
 //
 // Interactive modal that lets the user review the AI's proposed groupings
 // before they're applied. Used both for Preview Only (identify-only) and as a
-// confirmation step in Preview + Save Rule / Always-add modes (so the user can
+// confirmation step in Preview + Save Rule / Move + Save Domain modes (so the user can
 // veto rule mutations before they hit the table).
 //
 // Features:
