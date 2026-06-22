@@ -121,6 +121,14 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   justify-self: start !important;
 }
 
+.zao-control-row > menulist {
+  margin-inline-start: -4px !important;
+}
+
+.zao-control-row > input {
+  margin-inline-start: 0 !important;
+}
+
 .zao-control-row > .sineItemPreferenceLabel {
   margin-inline-start: 0 !important;
   padding-inline-start: 0 !important;
@@ -142,7 +150,7 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 .zao-checkbox-control {
   justify-self: start !important;
   margin-inline-start: 0 !important;
-  transform: none !important;
+  transform: translateX(5px) !important;
 }
 
 .zao-pref-hidden,
