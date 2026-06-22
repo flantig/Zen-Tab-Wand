@@ -4,6 +4,22 @@ A one-click tab tidier for [Zen Browser](https://zen-browser.app), installed via
 
 ![Before and after clicking the wand](docs/images/hero-before-after.png)
 
+## Table of contents
+
+- [How it works](#how-it-works)
+- [Installing](#installing)
+- [Quick start](#quick-start)
+- [Growing rules from the tab right-click](#growing-rules-from-the-tab-right-click)
+- [AI engines](#ai-engines)
+- [Setting up Ollama](#setting-up-ollama)
+- [Choosing an AI model](#choosing-an-ai-model)
+- [AI modes](#modes-when-ai-creates-a-new-group)
+- [Other settings](#other-settings)
+- [Backup & Restore](#backup--restore)
+- [Privacy](#privacy)
+- [Reporting bugs](#reporting-bugs)
+- [License](#license)
+
 ## How it works
 
 Two passes:
