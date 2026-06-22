@@ -4,7 +4,13 @@
 // external changes (right-click "Add to Rule…" submenu, AI Pass 2, Import) refresh the table in real time.
 
 import { CONFIG, LOG, h } from "./config.mjs";
-import { readRulesPref, writeRulesPref, readSkipDomainsPref, writeSkipDomainsPref } from "./rules.mjs";
+import {
+  readRulesPref,
+  sanitizeRules,
+  writeRulesPref,
+  readSkipDomainsPref,
+  writeSkipDomainsPref,
+} from "./rules.mjs";
 import {
   openColorPopover,
   updateSwatchAppearance,
@@ -799,21 +805,8 @@ export const buildBackupRestoreSection = () => {
 
         let validRules = null;
         if (importedRules) {
-          validRules = importedRules
-            .map((r) => ({
-              name: typeof r?.name === "string" ? r.name.trim() : "",
-              domains: Array.isArray(r?.domains)
-                ? r.domains.map((d) => String(d).trim()).filter(Boolean)
-                : [],
-              titleTerms: Array.isArray(r?.titleTerms)
-                ? r.titleTerms.map((d) => String(d).trim()).filter(Boolean)
-                : [],
-              ...(typeof r?.color === "string" ? { color: r.color } : {}),
-              ...(typeof r?.color2 === "string" ? { color2: r.color2 } : {}),
-              ...(typeof r?.icon === "string" ? { icon: r.icon } : {}),
-            }))
-            .filter((r) => r.name && (r.domains.length || r.titleTerms.length));
-          if (validRules.length === 0 && !importedSkip) {
+          validRules = sanitizeRules(importedRules);
+          if (validRules.length === 0 && !importedSkip && !importedIcons) {
             throw new Error("No valid rules in import (each needs a name plus domains or title matches)");
           }
         }

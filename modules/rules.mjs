@@ -35,26 +35,19 @@ const cleanRule = (r) => {
 const isRunnableRule = (r) =>
   r.name.length > 0 && (r.domains.length > 0 || r.titleTerms.length > 0);
 
-/**
- * Read the rules pref written by the settings widget.
- *
- * Three return states callers should know about:
- *   - `null`     — pref is unset, blank, or unparseable JSON
- *   - `[]`       — pref exists but every entry was malformed (and got dropped)
- *   - `Rule[]`   — one or more valid rules
- *
- * Each Rule has shape:
- * `{ name: string, domains: string[], titleTerms?: string[], color?: string, color2?: string, icon?: string }`.
- * Color fields are preserved if they're either Zen palette names (e.g. "blue") or hex (`#abc`).
- *
- * Malformed entries are silently dropped — invalid rules don't break valid ones.
- */
+// One sanitizer for every rule ingestion path. Keeping import, prefs, and
+// rules.json on this path prevents compatibility fixes from drifting apart.
+export const sanitizeRules = (rules, { keepIncomplete = false } = {}) => {
+  const cleaned = Array.isArray(rules) ? rules.map(cleanRule) : [];
+  return keepIncomplete ? cleaned : cleaned.filter(isRunnableRule);
+};
+
 /**
  * Read the rules pref.
  *
  * @param {Object} [opts]
  * @param {boolean} [opts.keepIncomplete=false]
- *   When true, in-progress rules (empty name or empty domains) are returned
+ *   When true, in-progress rules (empty name or no match terms) are returned
  *   alongside complete ones. The settings widget passes this so a user can
  *   add a blank row, close the browser, and find it still waiting to be
  *   filled in next session. The wand-click pipeline (`loadRules`) uses the
@@ -67,13 +60,7 @@ export const readRulesPref = ({ keepIncomplete = false } = {}) => {
     if (!raw.trim()) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
-    const cleaned = parsed
-      .map((r) => {
-        return cleanRule(r);
-      });
-    return keepIncomplete
-      ? cleaned
-      : cleaned.filter(isRunnableRule);
+    return sanitizeRules(parsed, { keepIncomplete });
   } catch (e) {
     console.warn(`${LOG} rules pref parse failed:`, e);
     return null;
@@ -158,7 +145,7 @@ export const validateRules = (data) => {
       throw new Error(`rule[${i}] '${rule.name}': needs 'domains' or 'titleTerms'`);
     }
   }
-  return data.rules.map(cleanRule).filter(isRunnableRule);
+  return sanitizeRules(data.rules);
 };
 
 const loadRulesFromFile = async () => {
