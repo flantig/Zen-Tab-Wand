@@ -181,15 +181,60 @@ const setupAIEngineChangeFallback = (dialog) => {
   const row = findPrefRow(dialog, CONFIG.AI_ENGINE_PREF);
   if (!row || row._zaoAIEngineFallback) return;
   row._zaoAIEngineFallback = true;
-  row.addEventListener("change", () => {
+  const refresh = () => {
     setTimeout(() => updateConditionalFields(dialog), 0);
-  });
+    setTimeout(() => updateConditionalFields(dialog), 100);
+  };
+  row.addEventListener("change", refresh);
+  row.addEventListener("input", refresh);
+  row.addEventListener("command", refresh);
+  row.addEventListener("click", refresh);
+};
+
+const normalizeAIEngineValue = (value) => {
+  const v = String(value || "").toLocaleLowerCase();
+  if (v === "") return "";
+  if (v === "off") return "off";
+  if (v === "local") return "local";
+  if (v === "ollama") return "ollama";
+  const hasLocal = v.includes("local");
+  const hasOllama = v.includes("ollama");
+  if (hasLocal && !hasOllama) return "local";
+  if (hasOllama && !hasLocal) return "ollama";
+  if (v === "none") return "off";
+  return "";
+};
+
+const readSelectedAIEngineFromDialog = (dialog) => {
+  const row = findPrefRow(dialog, CONFIG.AI_ENGINE_PREF);
+  if (!row) return "";
+
+  const selected = row.querySelector(
+    "option:checked, [selected], [aria-selected='true'], [data-selected='true']"
+  );
+  const selectedValue = normalizeAIEngineValue(
+    selected?.getAttribute?.("value") ||
+    selected?.getAttribute?.("data-value") ||
+    selected?.textContent
+  );
+  if (selectedValue) return selectedValue;
+
+  for (const control of row.querySelectorAll("select, menulist, button, input")) {
+    const value = normalizeAIEngineValue(control.value || control.getAttribute?.("value"));
+    if (value) return value;
+    const label = normalizeAIEngineValue(control.label || control.getAttribute?.("label"));
+    if (label) return label;
+    const text = normalizeAIEngineValue(control.textContent);
+    if (text) return text;
+  }
+
+  return "";
 };
 
 const updateConditionalFields = (dialog) => {
-  // Always go through getAIEngine() so unknown / empty / "None" pref values
-  // normalize to "off" the same way as everywhere else in the codebase.
-  const engine = getAIEngine();
+  // Prefer the visible control because Sine may update the UI before the pref
+  // observer sees the committed value. Fall back to the stored pref on reopen.
+  const engine = readSelectedAIEngineFromDialog(dialog) || getAIEngine();
   const isLocalOrOllama = engine === "local" || engine === "ollama";
 
   const setHidden = (row, hidden) => {
@@ -199,7 +244,7 @@ const updateConditionalFields = (dialog) => {
 
   // Ollama: shows BOTH the existing-behavior and new-group-behavior rows
   //   (they govern different parts of the unified classifier).
-  // Local: ONE row only — new-group-behavior with the 3-option filter applied.
+  // Local: ONE row only — new-group-behavior.
   //   Existing-behavior is hidden because Local unifies both decisions into
   //   the single dropdown (auto-add = grow rules; transient = don't; fresh =
   //   re-cluster ignoring rules entirely).
