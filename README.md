@@ -29,6 +29,7 @@ After install, a wand icon appears in your toolbar's workspace separator. Left-c
 
 1. Open **Settings → Zen Tab Wand**.
 2. Edit the **Group Rules** table to your liking. Each group needs a name and one or more match chips: `@` chips for domains (e.g. `github.com`) and `T` chips for page-title keywords. Colors, gradients, and icons are optional.
+
 ![Choosing to filter by domain or title](docs/images/domain-title.png)
 3. Click the **wand button** in the toolbar. Your matching tabs are sorted instantly.
 4. (Optional) Pick an **AI engine** for tabs the rules don't cover — see below.
@@ -133,6 +134,8 @@ Applies to both engines. The Local engine supports **Auto-add**, **Transient**, 
 ![Plan Mode modal](docs/images/plan-mode-modal.png)
 
 Ollama can also propose reviewed title chips (`T`) when **AI title learning** is set to **Review and Save (Simple)** or **Review and Save (Complex)**. Simple proposes chips from tab titles only; Complex can also fetch a small amount of page context and propose chips from that content. Proposed title chips appear in a separate title-rules section of the preview modal and are saved only when kept. Click a title chip to skip just that chip, or click the title-rule card to skip the whole proposal. Local Fresh Categories uses titles as transient clustering context but never saves title terms.
+
+![Title chip plan mode](docs/images/title-chips.png)
 
 ### Stickiness in Auto-add / Always-add
 
