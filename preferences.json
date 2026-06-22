@@ -52,6 +52,7 @@
     "label": "AI engine",
     "property": "extensions.zen-auto-organize.ai-engine",
     "defaultValue": "off",
+    "placeholder": false,
     "options": [
       { "label": "None", "value": "off" },
       { "label": "Local — Built-in model, limited capability", "value": "local" },
