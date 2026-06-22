@@ -176,12 +176,16 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 }
 
 .zao-custom-dropdown-button::after {
-  content: "⌄";
+  content: "";
   position: absolute;
   inset-inline-end: 12px;
   top: 50%;
-  transform: translateY(-54%);
-  font-size: 0.9rem;
+  width: 6px;
+  height: 6px;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: translateY(-65%) rotate(45deg);
+  opacity: 0.85;
 }
 
 .zao-custom-dropdown-menu {
