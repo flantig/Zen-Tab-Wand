@@ -14,7 +14,13 @@ import {
   updateIconButtonAppearance,
 } from "./emoji-picker.mjs";
 import { syncAllGroupColors } from "./groups.mjs";
-import { makeCustomIcon, readCustomIconsPref, writeCustomIconsPref } from "./custom-icons.mjs";
+import {
+  dataUrlToIconDataUrl,
+  fileToIconDataUrl,
+  makeCustomIcon,
+  readCustomIconsPref,
+  writeCustomIconsPref,
+} from "./custom-icons.mjs";
 
 let rulesPrefObserver = null;
 
@@ -633,17 +639,17 @@ export const buildCustomIconsEditor = () => {
       const files = Array.from(picker.files || []);
       for (const file of files) {
         if (!file.type.startsWith("image/")) continue;
-        if (file.size > 256 * 1024) {
-          alert(`${file.name} is too large. Please use an icon under 256 KB.`);
+        if (file.size > 8 * 1024 * 1024) {
+          alert(`${file.name} is too large. Please use an image under 8 MB.`);
           continue;
         }
-        const dataUrl = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result || ""));
-          reader.onerror = () => reject(reader.error || new Error("Read failed"));
-          reader.readAsDataURL(file);
-        });
-        icons.push(makeCustomIcon(file, dataUrl));
+        try {
+          const dataUrl = await fileToIconDataUrl(file);
+          icons.push(makeCustomIcon(file, dataUrl));
+        } catch (e) {
+          console.warn(`${LOG} failed to resize custom icon "${file.name}":`, e);
+          alert(`${file.name} could not be imported. Please try another image.`);
+        }
       }
       persistIcons();
       picker.remove();
@@ -817,13 +823,15 @@ export const buildBackupRestoreSection = () => {
           validSkip = importedSkip.map((d) => String(d).trim()).filter(Boolean);
         }
         const validIcons = importedIcons
-          ? importedIcons
-            .map((icon) => ({
+          ? (await Promise.all(importedIcons.map(async (icon) => {
+            const dataUrl = typeof icon?.dataUrl === "string" ? icon.dataUrl.trim() : "";
+            if (!dataUrl.startsWith("data:image/")) return null;
+            return {
               id: typeof icon?.id === "string" ? icon.id.trim() : "",
               name: typeof icon?.name === "string" ? icon.name.trim() : "",
-              dataUrl: typeof icon?.dataUrl === "string" ? icon.dataUrl.trim() : "",
-            }))
-            .filter((icon) => icon.id.startsWith("custom:") && icon.dataUrl.startsWith("data:image/"))
+              dataUrl: await dataUrlToIconDataUrl(dataUrl),
+            };
+          }))).filter((icon) => icon?.id.startsWith("custom:"))
           : null;
         if (validRules) {
           const iconIds = new Set((validIcons || readCustomIconsPref()).map((icon) => icon.id));
