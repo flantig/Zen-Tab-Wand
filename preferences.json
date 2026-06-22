@@ -81,7 +81,8 @@
     "defaultValue": "off",
     "options": [
       { "label": "Off", "value": "off" },
-      { "label": "Review and Save", "value": "review-save" }
+      { "label": "Review and Save (Simple)", "value": "review-save-simple" },
+      { "label": "Review and Save (Complex)", "value": "review-save-complex" }
     ]
   },
   {

@@ -113,12 +113,13 @@ const collectTitleTermCandidates = (plan, rules) => {
         if (existingTerms.has(key) || seenInTab.has(key)) continue;
         seenInTab.add(key);
         if (!byKey.has(key)) {
-          byKey.set(key, { term, count: 0, hosts: new Set(), titles: new Set(), sourceGroups: new Set() });
+          byKey.set(key, { term, count: 0, hosts: new Set(), titles: new Set(), urls: new Set(), sourceGroups: new Set() });
         }
         const candidate = byKey.get(key);
         candidate.count++;
         if (tab?.hostname) candidate.hosts.add(tab.hostname);
         if (tab?.title) candidate.titles.add(tab.title);
+        if (tab?.url) candidate.urls.add(tab.url);
         if (group.name) candidate.sourceGroups.add(group.name);
         if (candidate.term === candidate.term.toLocaleLowerCase() && term !== term.toLocaleLowerCase()) {
           candidate.term = term;
@@ -138,24 +139,29 @@ const collectTitleTermCandidates = (plan, rules) => {
     .map((c) => ({
       term: c.term,
       titles: [...c.titles],
+      urls: [...c.urls],
       sourceGroups: [...c.sourceGroups],
     }));
 };
 
-const GENERIC_TITLE_RULE_NAMES = new Set([
-  "search",
-  "web search",
-  "google",
-  "google search",
-  "bing",
-  "duckduckgo",
-]);
+const enrichTitleCandidates = async (candidates, mode) => {
+  if (mode !== "review-save-complex") return candidates;
+  return Promise.all(candidates.map(async (candidate) => {
+    const snippets = [];
+    for (const url of candidate.urls.slice(0, 2)) {
+      const snippet = await fetchPageSnippet(url);
+      if (snippet) snippets.push(snippet);
+    }
+    return { ...candidate, snippets };
+  }));
+};
 
-export const proposeTitleTermPatches = async (plan, rules, host, model) => {
-  const candidates = collectTitleTermCandidates(plan, rules);
+export const proposeTitleTermPatches = async (plan, rules, host, model, mode = "review-save-simple") => {
+  let candidates = collectTitleTermCandidates(plan, rules);
   if (candidates.length === 0) return [];
+  candidates = await enrichTitleCandidates(candidates, mode);
 
-  const prompt = buildTitleTermPrompt(rules, candidates);
+  const prompt = buildTitleTermPrompt(rules, candidates, mode === "review-save-complex" ? "complex" : "simple");
   const r = await ollamaGenerateJson(host, model, prompt);
   if (!r.ok) {
     console.warn(`${LOG} Ollama title learning failed (${r.errorType}: ${r.error})`);
@@ -185,7 +191,6 @@ export const proposeTitleTermPatches = async (plan, rules, host, model) => {
     const groupRaw = stripMetaPrefix(String(rawGroupName || "").trim());
     const groupLower = groupRaw.toLocaleLowerCase();
     if (!groupRaw || groupLower === "none" || groupLower === "skipped") continue;
-    if (GENERIC_TITLE_RULE_NAMES.has(groupLower)) continue;
 
     const groupName = existingRuleNameByLower.get(groupLower) || groupRaw;
     const groupKey = groupName.toLocaleLowerCase();

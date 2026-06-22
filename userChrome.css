@@ -1097,7 +1097,14 @@ dialog.zao-warning-dialog::backdrop {
   margin: 0 0 7px;
 }
 .zao-preview-title-chip {
-  cursor: default;
+  appearance: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.zao-preview-title-chip-skipped {
+  opacity: 0.45;
+  text-decoration: line-through;
 }
 .zao-preview-title-chip-warning {
   border-color: color-mix(in srgb, #ffbc4a 65%, transparent);

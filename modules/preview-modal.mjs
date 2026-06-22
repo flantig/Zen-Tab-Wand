@@ -34,7 +34,7 @@ const clonePlan = (p) => ({
   newGroups: (p.newGroups || []).map((g) => ({ name: g.name, tabs: [...g.tabs] })),
   rulePatches: (p.rulePatches || []).map((patch) => ({
     groupName: patch.groupName,
-    titleTerms: (patch.titleTerms || []).map((t) => ({ ...t })),
+    titleTerms: (patch.titleTerms || []).map((t) => ({ ...t, skipped: Boolean(t.skipped) })),
   })),
   skipped: [...(p.skipped || [])],
 });
@@ -281,7 +281,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
       const head = h("div", { class: "zao-preview-group-head" });
       head.appendChild(h("span", {
         class: "zao-preview-group-name",
-        text: `${patch.groupName} (${patch.titleTerms.length} title ${patch.titleTerms.length === 1 ? "term" : "terms"})`,
+        text: `${patch.groupName} (${activeTitleTerms(patch).length}/${patch.titleTerms.length} title ${patch.titleTerms.length === 1 ? "term" : "terms"})`,
       }));
       head.appendChild(h("span", {
         class: "zao-preview-group-state",
@@ -295,13 +295,24 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
     function renderRulePatch(patch) {
       const wrap = h("div", { class: "zao-preview-rule-patches" });
       for (const item of patch.titleTerms || []) {
-        const pill = h("span", { class: `zao-pill zao-title-pill zao-preview-title-chip${item.warning ? " zao-preview-title-chip-warning" : ""}` });
+        const pill = h("button", { class: `zao-pill zao-title-pill zao-preview-title-chip${item.warning ? " zao-preview-title-chip-warning" : ""}${item.skipped ? " zao-preview-title-chip-skipped" : ""}` });
+        pill.type = "button";
+        pill.setAttribute("aria-pressed", item.skipped ? "false" : "true");
+        pill.addEventListener("click", (e) => {
+          e.stopPropagation();
+          item.skipped = !item.skipped;
+          render();
+        });
         if (item.warning) pill.title = item.warning;
         pill.appendChild(h("span", { class: "zao-pill-kind", text: "T" }));
         pill.appendChild(h("span", { text: item.term }));
         wrap.appendChild(pill);
       }
       return wrap;
+    }
+
+    function activeTitleTerms(patch) {
+      return (patch.titleTerms || []).filter((item) => !item.skipped);
     }
 
     function renderTabRow(tabInfo) {
@@ -504,9 +515,13 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
         droppedTabs.push(a.tabInfo);
         return false;
       });
-      const finalRulePatches = (currentPlan.rulePatches || []).filter((patch) =>
-        kept.has(titleKey(patch.groupName))
-      );
+      const finalRulePatches = (currentPlan.rulePatches || [])
+        .filter((patch) => kept.has(titleKey(patch.groupName)))
+        .map((patch) => ({
+          ...patch,
+          titleTerms: activeTitleTerms(patch).map((item) => ({ ...item })),
+        }))
+        .filter((patch) => patch.titleTerms.length > 0);
       cleanup({
         assignedToExisting: finalExisting,
         newGroups: finalNewGroups,

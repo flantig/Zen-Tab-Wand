@@ -240,9 +240,10 @@ export const getAIEngine = () => {
 
 export const getAITitleLearning = () => {
   try {
-    return Services.prefs.getStringPref(CONFIG.AI_TITLE_LEARNING_PREF, "off") === "review-save"
-      ? "review-save"
-      : "off";
+    const value = Services.prefs.getStringPref(CONFIG.AI_TITLE_LEARNING_PREF, "off");
+    if (value === "review-save" || value === "review-save-simple") return "review-save-simple";
+    if (value === "review-save-complex") return "review-save-complex";
+    return "off";
   } catch {
     return "off";
   }

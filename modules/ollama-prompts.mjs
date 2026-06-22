@@ -169,18 +169,20 @@ Output ONLY a JSON object mapping each original category name (left side) to its
 }`;
 };
 
-export const buildTitleTermPrompt = (rules, candidates) => {
+export const buildTitleTermPrompt = (rules, candidates, mode = "simple") => {
   const candidateLines = candidates.map((c, i) => {
     const titles = (c.titles || []).slice(0, 3).map((t) => `"${String(t).replace(/\s+/g, " ").slice(0, TITLE_LIMIT)}"`).join("; ");
-    return `${i}. ${c.term} — seen in titles: ${titles}`;
+    const snippets = mode === "complex" && c.snippets?.length
+      ? `\n   Page context: ${c.snippets.slice(0, 2).map((s) => `"${String(s).replace(/\s+/g, " ").slice(0, 180)}"`).join("; ")}`
+      : "";
+    return `${i}. ${c.term} — seen in titles: ${titles}${snippets}`;
   }).join("\n");
 
-  return `Assign each title keyword below to the browser rule category it should teach.
+  return `Assign each title keyword below to a browser rule category.
 
 Important:
-- The keyword must be categorized by its underlying topic, not by the website where it appeared.
-- Search-result tabs from google.com, bing.com, duckduckgo.com, etc. should NOT become "Search" just because the host is a search engine.
-- Example: "mtg" in titles like "mtg commander - Google Search" should map to a collectible-card-game category, not Search.
+- Categorize the keyword by what it means in the page titles and context.
+- Do not categorize solely by the hostname or provider where the title appeared.
 - Use an existing label when it fits. Otherwise invent a short Title Case label.
 - Use "none" when the keyword is too generic or you cannot infer a useful topic.
 
@@ -193,7 +195,7 @@ ${candidateLines}
 Output ONLY a JSON object mapping each exact keyword to its chosen label or "none".
 Example:
 {
-  "mtg": "Collectible Card Games",
-  "calendar": "none"
+  "Commander": "Card Games",
+  "calendar": "Productivity"
 }`;
 };

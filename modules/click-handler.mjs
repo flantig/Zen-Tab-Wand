@@ -229,9 +229,10 @@ export const handleOrganizeClick = async () => {
     }
 
     const existingBehaviorForTitle = aiEngine === "ollama" ? getAIExistingBehavior() : "";
+    const titleLearningMode = getAITitleLearning();
     const titleLearningWanted =
       aiEngine === "ollama" &&
-      getAITitleLearning() === "review-save" &&
+      titleLearningMode !== "off" &&
       !isIdentifyOnly &&
       !isFreshMode &&
       newGroupBehavior !== "prompt" &&
@@ -387,7 +388,7 @@ export const handleOrganizeClick = async () => {
 
           if (showModal) {
             if (titleLearningWanted) {
-              pass2.rulePatches = await proposeTitleTermPatches(pass2, rules, getOllamaHost(), getOllamaModel());
+              pass2.rulePatches = await proposeTitleTermPatches(pass2, rules, getOllamaHost(), getOllamaModel(), titleLearningMode);
               if (pass2.rulePatches.length === 0 && pass2.assignedToExisting.length === 0 && pass2.newGroups.length === 0) {
                 showModal = false;
                 planToApply = null;
