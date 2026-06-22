@@ -79,6 +79,7 @@
     "label": "AI title learning — propose reviewed T chips from tab titles (simple) and/or page content (complex)",
     "property": "extensions.zen-auto-organize.ai-title-learning",
     "defaultValue": "off",
+    "placeholder": false,
     "options": [
       { "label": "None", "value": "off" },
       { "label": "Review and Save (Simple)", "value": "review-save-simple" },
