@@ -231,21 +231,6 @@ const readSelectedAIEngineFromDialog = (dialog) => {
   return "";
 };
 
-const prefRowDebug = (row) => {
-  if (!row) return null;
-  const control = row.querySelector("select, menulist, button, input");
-  return {
-    id: row.id || "",
-    classes: row.className || "",
-    hiddenClass: row.classList?.contains("zao-pref-hidden") || false,
-    controlTag: control?.tagName || "",
-    controlValue: control?.value || control?.getAttribute?.("value") || "",
-    controlLabel: control?.label || control?.getAttribute?.("label") || "",
-    controlText: (control?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 140),
-    rowText: (row.textContent || "").replace(/\s+/g, " ").trim().slice(0, 180),
-  };
-};
-
 const updateConditionalFields = (dialog) => {
   // Prefer the visible control because Sine may update the UI before the pref
   // observer sees the committed value. Fall back to the stored pref on reopen.
@@ -284,14 +269,6 @@ const updateConditionalFields = (dialog) => {
   setHidden(rows.ollamaWarmup,      engine !== "ollama");
   setHidden(rows.localBatchSize,    !isLocalOrOllama);
   alignSettingRows(dialog);
-
-  console.log(`${LOG} prefs conditional`, {
-    uiEngine,
-    prefEngine,
-    engine,
-    isLocalOrOllama,
-    rows: Object.fromEntries(Object.entries(rows).map(([key, row]) => [key, prefRowDebug(row)])),
-  });
 };
 
 // First-time AI engine warning modals.
