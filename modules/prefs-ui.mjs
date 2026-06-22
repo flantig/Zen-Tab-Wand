@@ -142,15 +142,6 @@ const CONTROL_ROW_PREFS = [
   CONFIG.AI_LOCAL_BATCH_SIZE_PREF,
 ];
 
-const DROPDOWN_PREFS = [
-  CONFIG.MATCH_MODE_PREF,
-  CONFIG.GRADIENT_STYLE_PREF,
-  CONFIG.AI_ENGINE_PREF,
-  CONFIG.AI_TITLE_LEARNING_PREF,
-  CONFIG.AI_EXISTING_BEHAVIOR_PREF,
-  CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF,
-];
-
 const normalizeMatchModeLabel = (row) => {
   const label = row.querySelector(".sineItemPreferenceLabel") || row.firstElementChild;
   if (!label) return;
@@ -248,77 +239,6 @@ const AI_NEW_GROUP_OPTIONS = {
 const optionValue = (option) =>
   option?.value || option?.getAttribute?.("value") || option?.getAttribute?.("data-value") || "";
 
-const shortOptionLabel = (label) =>
-  String(label || "").split(/\s+(?:--|—)\s+/)[0].trim();
-
-const selectedOptionForControl = (control) => {
-  if (control.selectedItem) return control.selectedItem;
-  if (typeof control.selectedIndex === "number" && control.options?.[control.selectedIndex]) {
-    return control.options[control.selectedIndex];
-  }
-  return null;
-};
-
-const shortenTextNode = (node) => {
-  if (node.nodeType === Node.TEXT_NODE) {
-    const full = node.nodeValue || "";
-    const short = shortOptionLabel(full);
-    if (short && short !== full) {
-      node.nodeValue = short;
-      return full;
-    }
-    return "";
-  }
-  for (const child of node.childNodes || []) {
-    const full = shortenTextNode(child);
-    if (full) return full;
-  }
-  return "";
-};
-
-const shortenSelectedDropdownLabel = (row) => {
-  if (!row) return;
-  for (const control of row.querySelectorAll("menulist")) {
-    const selected = selectedOptionForControl(control);
-    const full = selected?.label || selected?.getAttribute?.("label") || selected?.textContent || control.label;
-    const short = shortOptionLabel(full);
-    if (!short || short === full) continue;
-    control.label = short;
-    control.setAttribute("label", short);
-    control.title = full;
-  }
-  for (const control of row.querySelectorAll("button, [role='button']")) {
-    const full = control.textContent || control.label || control.getAttribute?.("label") || "";
-    const short = shortOptionLabel(full);
-    if (!short || short === full) continue;
-    control.title = full;
-    control.setAttribute("aria-label", full);
-    if (!shortenTextNode(control)) control.textContent = short;
-  }
-};
-
-const shortenSelectedDropdownLabels = (dialog) => {
-  for (const prefName of DROPDOWN_PREFS) {
-    shortenSelectedDropdownLabel(findPrefRow(dialog, prefName));
-  }
-};
-
-const setupShortDropdownLabelRefresh = (dialog) => {
-  for (const prefName of DROPDOWN_PREFS) {
-    const row = findPrefRow(dialog, prefName);
-    if (!row || row._zaoShortLabelRefresh) continue;
-    row._zaoShortLabelRefresh = true;
-    const refresh = () => {
-      setTimeout(() => shortenSelectedDropdownLabel(row), 0);
-      setTimeout(() => shortenSelectedDropdownLabel(row), 100);
-    };
-    row.addEventListener("change", refresh);
-    row.addEventListener("input", refresh);
-    row.addEventListener("command", refresh);
-    row.addEventListener("click", refresh);
-  }
-};
-
 const setNewGroupOptionsForEngine = (dialog, engine) => {
   const row = findPrefRow(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF);
   if (!row) return;
@@ -385,8 +305,6 @@ const updateConditionalFields = (dialog) => {
   setHidden(rows.ollamaWarmup,      engine !== "ollama");
   setHidden(rows.localBatchSize,    !isLocalOrOllama);
   setNewGroupOptionsForEngine(dialog, engine);
-  shortenSelectedDropdownLabels(dialog);
-  setupShortDropdownLabelRefresh(dialog);
   alignSettingRows(dialog);
 };
 
