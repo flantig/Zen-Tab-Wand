@@ -30,7 +30,7 @@ The function the toolbar button invokes. Sequences all the passes.
 11. getAIEngine() === "off" ? skip Pass 2 : continue
 12. setButtonThinking(true)           — start wand pulse animation
 13. runPass2()                        — branches on engine:
-       "local"  → ai.mjs runPass2()       (existing groups only)
+       "local"  → ai.mjs runPass2()       (existing groups or simple new groups)
        "ollama" → ollama.mjs runPass2Ollama() OR runPass2OllamaFresh()
                   depending on ai-new-group-behavior
 14. Plan Mode gate (if applicable):

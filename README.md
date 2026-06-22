@@ -109,7 +109,7 @@ The mod ships with two engines and lets you pick any model your Ollama install c
 
 | Engine / model | Size on disk | What it can do | System impact |
 |---|---|---|---|
-| **Local** (`Mozilla/smart-tab-embedding`, built in) | ~100 MB | Assigns tabs to existing groups only. No new categories. | Light, CPU only |
+| **Local** (`Mozilla/smart-tab-embedding`, built in) | ~100 MB | Assigns tabs to existing groups and can create simple hostname/intent-based groups. | Light, CPU only |
 | `qwen2.5:0.5b` | ~400 MB | Basic clustering. Vague names. | Tiny, ~500 MB VRAM |
 | `qwen2.5:1.5b` (default) | ~1 GB | Decent clustering, simple names. | Small, ~1.5 GB VRAM |
 | `qwen2.5:3b` | ~2 GB | Better naming and category logic. | Medium, ~3 GB VRAM |
@@ -140,7 +140,7 @@ In Ollama **Auto-add** (new group) and **Always-add** (existing group) modes, ta
 - **Skip Domains** — a list of hostnames the wand should never touch. Tabs matching any pattern get ejected from any group and parked at the top of the workspace on every click. Useful for tabs you want to always keep visible and ungrouped. Grow the list from a tab right-click → **Add "host" to Rule…** → **Skip**.
 - **Rule matching priority** — choose URL only, Title only, URL then Title, or Title then URL. The rule list is still first-match-wins within whichever source is being checked.
 - **Custom Icons** — upload local image icons and manage the custom-only picker list. Uploaded icons are stored locally and can be assigned from the rule icon picker.
-- **Strict rule enforcement** — when on, tabs sitting inside a group without any currently matching rule get ejected to the top on every wand click. Off by default.
+- **Strict rule enforcement** — when on, tabs sitting inside a group without any currently matching rule get ejected to the top on every wand click. It uses the active Rule matching priority, so title-only mode enforces title matches instead of domain matches. Off by default.
 - **Minimal style** — strips the colored backgrounds and gradients from groups for a flatter look. Rule icons stay visible.
 - **Keep Ollama model warm** — preloads the model at browser startup and keeps it in VRAM between clicks. Faster, but uses VRAM continuously.
 - **Local AI batch size** — only used when there are more than 75 unmatched tabs. The Local engine switches into a chunked pipeline that dedupes by hostname (one embedding per unique domain) and yields between batches so the browser stays responsive. Smaller batches = gentler on CPU, larger = faster. Above 500 unmatched tabs a confirmation modal appears before the AI pass runs.

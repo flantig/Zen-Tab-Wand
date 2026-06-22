@@ -293,16 +293,12 @@ const COUNTDOWN_SECONDS = 3;
 const showAckModal = ({ ackPref, contentNodes, logTag }) => {
   let alreadyAck = false;
   try { alreadyAck = Services.prefs.getBoolPref(ackPref, false); } catch {}
-  console.debug(`${LOG} [${logTag}] maybeShow called — acknowledged=${alreadyAck}`);
   if (alreadyAck) {
-    console.debug(`${LOG} [${logTag}] skipping — already acknowledged. To re-show, unset ${ackPref} in about:config.`);
     return;
   }
   if (document.querySelector(".zao-warning-dialog[open]")) {
-    console.debug(`${LOG} [${logTag}] skipping — another warning modal already open`);
     return;
   }
-  console.debug(`${LOG} [${logTag}] building modal`);
 
   const modal = h("dialog", { class: "zao-warning-dialog" });
   for (const n of contentNodes) modal.appendChild(n);
@@ -344,7 +340,6 @@ const showAckModal = ({ ackPref, contentNodes, logTag }) => {
   document.documentElement.appendChild(modal);
   try {
     modal.showModal();
-    console.debug(`${LOG} [${logTag}] modal shown`);
   } catch (e) {
     console.warn(`${LOG} [${logTag}] showModal() failed — falling back to confirm():`, e);
     modal.remove();
@@ -405,7 +400,7 @@ const maybeShowLocalWarning = () => {
 
   const li2 = h("li");
   li2.appendChild(h("strong", { text: "Limited: " }));
-  li2.appendChild(document.createTextNode("only assigns tabs to existing groups. Won't invent new categories."));
+  li2.appendChild(document.createTextNode("creates simpler hostname/intent-based groups than Ollama."));
 
   const li3 = h("li");
   li3.appendChild(h("strong", { text: "Want stronger results? " }));
@@ -438,7 +433,6 @@ const setupEnginePrefObserver = () => {
       if (topic !== "nsPref:changed") return;
       if (data !== CONFIG.AI_ENGINE_PREF) return;
       const engine = getAIEngine();
-      console.log(`${LOG} [ollama-warning] engine pref changed → "${engine}"`);
       for (const d of document.querySelectorAll(".sineItemPreferenceDialog")) {
         if (isOurDialog(d)) {
           updateConditionalFields(d);
