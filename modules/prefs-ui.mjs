@@ -187,6 +187,9 @@ const alignSettingRows = (dialog) => {
     const row = findPrefRow(dialog, prefName);
     if (!row) continue;
     row.classList.add("zao-control-row");
+    if (prefName === CONFIG.MATCH_MODE_PREF) {
+      row.classList.add("zao-match-mode-row");
+    }
   }
   for (const prefName of CHECKBOX_RIGHT_PREFS) {
     const row = findPrefRow(dialog, prefName);
@@ -200,6 +203,15 @@ const alignSettingRows = (dialog) => {
       }
     }
   }
+};
+
+const setupAIEngineChangeFallback = (dialog) => {
+  const row = findPrefRow(dialog, CONFIG.AI_ENGINE_PREF);
+  if (!row || row._zaoAIEngineFallback) return;
+  row._zaoAIEngineFallback = true;
+  row.addEventListener("change", () => {
+    setTimeout(() => updateConditionalFields(dialog), 0);
+  });
 };
 
 const updateConditionalFields = (dialog) => {
@@ -490,6 +502,7 @@ const performInject = (dialog) => {
   injectSectionDescriptions(dialog);
   setupEnginePrefObserver();
   updateConditionalFields(dialog);
+  setupAIEngineChangeFallback(dialog);
   console.log(`${LOG} injected rules + skip + backup sections into Sine settings dialog`);
 };
 

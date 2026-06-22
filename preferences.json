@@ -51,7 +51,9 @@
     "type": "dropdown",
     "label": "AI engine",
     "property": "extensions.zen-auto-organize.ai-engine",
+    "defaultValue": "off",
     "options": [
+      { "label": "None", "value": "off" },
       { "label": "Local — Built-in model, limited capability", "value": "local" },
       { "label": "Ollama — Stronger model, requires Ollama running locally", "value": "ollama" }
     ]

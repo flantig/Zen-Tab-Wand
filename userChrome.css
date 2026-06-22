@@ -120,6 +120,12 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   justify-self: start !important;
 }
 
+.zao-match-mode-row > :first-child {
+  margin-inline-start: 0 !important;
+  padding-inline-start: 0 !important;
+  text-indent: 0 !important;
+}
+
 .zao-checkbox-right {
   display: grid !important;
   grid-template-columns: var(--zao-pref-label-column) auto !important;
@@ -133,7 +139,14 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 .zao-checkbox-right [role="checkbox"],
 .zao-checkbox-control {
   justify-self: start !important;
-  margin-inline-start: 14px !important;
+  margin-inline-start: 0 !important;
+  transform: translateX(14px) !important;
+}
+
+.zao-pref-hidden,
+.zao-pref-hidden.zao-control-row,
+.zao-pref-hidden.zao-checkbox-right {
+  display: none !important;
 }
 
 .zao-rules-editor {
@@ -229,8 +242,8 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 /* Action prefs — custom rows that mirror Sine's label/description + control
    layout while keeping our own buttons. */
 .zao-backup-section {
-  margin: 8px 0 !important;
-  padding: 0 12px !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 .zao-action-pref {
@@ -771,8 +784,8 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 }
 
 .zao-custom-icons-editor {
-  margin: 8px 0 !important;
-  padding: 0 12px !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 .zao-custom-icons-popover {
   position: fixed;
