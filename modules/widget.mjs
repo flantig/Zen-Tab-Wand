@@ -542,7 +542,7 @@ export const buildCustomIconsEditor = () => {
   const text = h("div", { class: "zao-action-pref-text" });
   text.appendChild(h("div", {
     class: "zao-action-pref-title",
-    text: "Custom Icons — Upload local image icons and manage the custom-only picker list.",
+    text: "Custom Icons — Upload local image icons and manage the custom-only picker list. Recommended 128x128; will resize if different.",
   }));
   const bar = h("div", { class: "zao-action-pref-actions" });
   const upload = h("button", { class: "zao-backup-btn", text: "Upload icons..." });

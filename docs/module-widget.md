@@ -56,7 +56,7 @@ All elements created via `h(tag)` from `config.mjs` (the HTML namespace helper) 
 
 Rule saves also call `syncLiveGroupAppearances()`, which asks the browser window to re-run `syncAllGroupColors()` so color/gradient/icon changes repaint existing groups immediately.
 
-`buildCustomIconsEditor()` renders a Look & Feel action row matching the native preference layout: `Custom Icons — Upload local image icons and manage the custom-only picker list.` with Upload/Manage buttons in the shared control column. Uploaded image files are resized to fit within 128x128 pixels, stored as data URLs in `extensions.zen-auto-organize.custom-icons-json`, and filenames become searchable icon names. The Manage icons button opens a custom-only picker popover; clicking a custom icon there removes it and clears matching rule references.
+`buildCustomIconsEditor()` renders a Look & Feel action row matching the native preference layout: `Custom Icons — Upload local image icons and manage the custom-only picker list. Recommended 128x128; will resize if different.` with Upload/Manage buttons in the shared control column. Uploaded image files are resized to a 128px longest side, stored as data URLs in `extensions.zen-auto-organize.custom-icons-json`, and filenames become searchable icon names. The Manage icons button opens a custom-only picker popover; clicking a custom icon there removes it and clears matching rule references.
 
 ## Why a full re-render on each mutation
 

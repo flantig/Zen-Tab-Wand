@@ -61,14 +61,14 @@ const loadImage = (url) =>
     img.src = url;
   });
 
-const cappedImageDataUrl = async ({ url, type, maxDimension, fallback }) => {
+const normalizedImageDataUrl = async ({ url, type, maxDimension, fallback }) => {
   const img = await loadImage(url);
   const width = img.naturalWidth || img.width;
   const height = img.naturalHeight || img.height;
   if (!width || !height) return fallback();
-  if (width <= maxDimension && height <= maxDimension) return fallback();
 
-  const scale = Math.min(maxDimension / width, maxDimension / height);
+  const scale = maxDimension / Math.max(width, height);
+  if (!Number.isFinite(scale) || scale <= 0) return fallback();
   const canvas = document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
   canvas.width = Math.max(1, Math.round(width * scale));
   canvas.height = Math.max(1, Math.round(height * scale));
@@ -83,7 +83,7 @@ const cappedImageDataUrl = async ({ url, type, maxDimension, fallback }) => {
 export const fileToIconDataUrl = async (file, maxDimension = CUSTOM_ICON_MAX_DIMENSION) => {
   const objectUrl = URL.createObjectURL(file);
   try {
-    return await cappedImageDataUrl({
+    return await normalizedImageDataUrl({
       url: objectUrl,
       type: file.type,
       maxDimension,
@@ -97,7 +97,7 @@ export const fileToIconDataUrl = async (file, maxDimension = CUSTOM_ICON_MAX_DIM
 export const dataUrlToIconDataUrl = async (dataUrl, maxDimension = CUSTOM_ICON_MAX_DIMENSION) => {
   const type = String(dataUrl).match(/^data:([^;,]+)/)?.[1] || "";
   try {
-    return await cappedImageDataUrl({
+    return await normalizedImageDataUrl({
       url: dataUrl,
       type,
       maxDimension,
