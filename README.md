@@ -35,7 +35,7 @@ After install, a wand icon appears in your toolbar's workspace separator. Left-c
 
 ![Zen Tab Wand settings panel](docs/images/settings-panel.png)
 
-Fresh installs start with a small set of editable default groups: Calendar, AI Tools, Dev, Shopping, Social, and Search. Existing user rules are not overwritten when these defaults change.
+Fresh installs start with a small set of editable default groups: Calendar, AI Tools, Dev, Shopping, Social, Music, and Search. Existing user rules are not overwritten when these defaults change.
 
 ## Growing rules from the tab right-click
 

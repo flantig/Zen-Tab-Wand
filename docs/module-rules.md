@@ -38,7 +38,7 @@ All read/write access to the rules pref + the file fallback. Cleans malformed in
 
 `domains` and `titleTerms` are both optional at the JSON boundary, but a runnable rule needs a name plus at least one domain or title term. `sanitizeRules` is permissive on `color` and `color2`: accepts both a Zen palette name and a hex value. Anything else gets dropped. Plain emoji/text icons are capped to 12 characters; custom icon references are capped to 128 characters.
 
-The built-in defaults intentionally stay small and only seed fresh installs or fallback loads: Calendar, AI Tools, Dev, Shopping, Social, and Search. Once a user has a rules pref, default changes do not overwrite it.
+The built-in defaults intentionally stay small and only seed fresh installs or fallback loads: Calendar, AI Tools, Dev, Shopping, Social, Music, and Search. Once a user has a rules pref, default changes do not overwrite it.
 
 ## Why the pref is a JSON string, not a struct
 
