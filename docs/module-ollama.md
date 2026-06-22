@@ -16,7 +16,7 @@ The implementation is split across three files for clarity:
 |---|---|
 | `runPass2Ollama(unmatched, rules, workspaceId, host, model)` | Unified classify + cluster + merge pass. Returns the standard Pass 2 plan shape `{ assignedToExisting, newGroups, skipped }`. |
 | `runPass2OllamaFresh(allTabs, host, model)` | Fresh-categories mode — ignores rules entirely, lets the model invent groups from scratch. Used when `ai-new-group-behavior = "fresh-categories"`. |
-| `classifyExistingGroupsBatch(tabs, rules, host, model)` | Single-pass "assign these tabs into one of these existing groups" call. Used by the Plan Mode modal's **Re-assign to existing** action. |
+| `classifyExistingGroupsBatch(tabs, rules, host, model)` | Single-pass "assign these tabs into one of these existing groups" call. Used by the preview modal's **Re-assign to existing** action. |
 | `proposeTitleTermPatches(plan, rules, host, model)` | Extracts title keyword candidates from grouped tab titles, then asks Ollama which rule category each title term should teach. |
 | `unifiedClassifyOllama` / `clusterUnmatchedNewGroups` / `mergeNewCategoriesPass` | Internal-but-exported building blocks. |
 | `warmupOllama(host, model)`, `checkOllamaReady(host)`, `reportOllamaError(...)` | Re-exported from `ollama-transport.mjs` for callers that don't want to know about the split. |

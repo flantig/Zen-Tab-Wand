@@ -6,7 +6,7 @@
 //     new groups for tabs that don't fit. Single call, then a merge pass to
 //     consolidate over-specialized categories.
 //   - Fresh classifier: ignores existing rules entirely, re-clusters every
-//     tab from scratch. Powers the "Fresh categories" and Plan Mode flows.
+//     tab from scratch. Powers the "Fresh categories" and Preview Only flows.
 //
 // All transport (fetch, ping, warmup, JSON-validate) lives in
 // ollama-transport.mjs. All prompt strings live in ollama-prompts.mjs. This
@@ -264,7 +264,7 @@ export const proposeTitleTermPatches = async (plan, rules, host, model, mode = "
 // ─── Classify into existing rules ────────────────────────────────────────────
 // Returns Map<tabIndex, groupName | null>. Throws on transport / parse errors;
 // caller surfaces to the user. Used both directly (re-assign-to-planned in
-// the Plan Mode modal) and indirectly via the Ollama Pass 2 driver.
+// the preview modal) and indirectly via the Ollama Pass 2 driver.
 
 export const classifyExistingGroupsBatch = async (unmatched, rules, host, model) => {
   if (!unmatched?.length || !rules?.length) return new Map();
@@ -345,7 +345,7 @@ const clusterUnmatchedNewGroups = async (leftover, host, model) => {
 // Single Ollama call that asks the model, for each tab, EITHER an existing
 // rule category OR a new category name OR "skipped". Followed by a merge pass
 // to consolidate. Used when the engine is Ollama and the flow isn't fresh /
-// Plan Mode (i.e., auto-add / always-add / transient / prompt modes).
+// Preview Only (i.e., auto-add / always-add / transient / prompt modes).
 
 export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
   if (!unmatched?.length) return { assignedToExisting: [], newGroups: [], skipped: [] };

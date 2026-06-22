@@ -390,7 +390,7 @@ export const runPass2 = async (unmatched, rules, workspaceId) => {
 //   - 3 unique brands       → "Github, Gitlab & Bitbucket"
 //   - 4+                    → "Github + 3 more"
 //
-// Use Plan Mode (identify-only) so the user can rename clusters before applying.
+// Use Preview Only (identify-only) so the user can rename clusters before applying.
 // Caveat: Mozilla's smart-tab-embedding model clusters by stylistic title
 // similarity (homepage-style pages cluster together regardless of topic), so
 // results are quirky vs. Ollama. The user gets the option; the modal is the

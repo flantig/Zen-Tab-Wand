@@ -51,8 +51,8 @@ The tab doesn't move — only the rule grows. Click the wand afterwards to actua
 | Engine | What it does | Setup |
 |---|---|---|
 | **Off** | Rules only. Tabs without a matching rule stay where they are. | — |
-| **Local** | Firefox's bundled tab-embedding model. Assigns tabs to existing groups and — as of v1.0.2 — can also invent new groups (Auto-add / Transient / Fresh categories). Names are derived from hostnames, intent labels, or extracted keywords. No setup. | None — built in. |
-| **Ollama** | A local Ollama daemon. Assigns tabs into existing groups and invents new ones, with a merge pass and an optional interactive **Plan Mode** where you preview the plan before applying. | Install [Ollama](https://ollama.com), then `ollama pull qwen2.5:1.5b` (or a bigger model if you have the VRAM). |
+| **Local** | Firefox's bundled tab-embedding model. Assigns tabs to existing groups and — as of v1.0.2 — can also invent new groups (Preview + Save Rule / Group Once / Fresh Rebuild). Names are derived from hostnames, intent labels, or extracted keywords. No setup. | None — built in. |
+| **Ollama** | A local Ollama daemon. Assigns tabs into existing groups and invents new ones, with a merge pass and an optional interactive **Preview Only** mode where you review the plan before applying. | Install [Ollama](https://ollama.com), then `ollama pull qwen2.5:1.5b` (or a bigger model if you have the VRAM). |
 
 The first time you pick **Local** or **Ollama** in settings, a one-shot warning modal explains the resource cost (CPU/RAM for Local, VRAM for Ollama) and asks you to acknowledge before the engine is allowed to run.
 
@@ -121,25 +121,32 @@ The mod ships with two engines and lets you pick any model your Ollama install c
 
 ## Modes when AI creates a new group
 
-Applies to both engines. The Local engine supports **Auto-add**, **Transient**, and **Fresh categories**; Ollama supports all five.
+Applies to both engines. The Local engine supports **Preview + Save Rule**, **Group Once**, and **Fresh Rebuild**; Ollama supports all five.
 
 | Mode | What happens |
 |---|---|
-| **Auto-add** | AI creates the group AND saves a rule with the tabs' hostnames. Rules grow over time. Ollama shows a confirmation modal; Local applies directly. |
-| **Transient** | AI creates the group, no rule saved. Fast, no confirmation. |
-| **Prompt** (Ollama only) | Opens Zen's edit modal for each new group so you can rename/recolor. |
-| **Fresh categories** | Re-tidies **all** tabs into fresh categories, ignoring your rules. Like Arc Browser's Tidy. Local Fresh names clusters from a shared hostname (e.g. `Github & Gitlab`), an intent label (e.g. `Reading`), or extracted keywords (e.g. `Yu-Gi-Oh`) depending on the strongest signal in the cluster. Ollama Fresh runs a third-phase fuzzy-name dedupe that catches near-duplicates like `Content Unavailable` + `Content Unavailability`. |
-| **Plan Mode** (Ollama only) | Shows the proposed plan in a modal first. You toggle each group keep/skip, optionally click "Re-assign" to redo the unkept tabs into your existing groups, then Apply. |
+| **Preview + Save Rule** | AI shows a preview, then creates kept groups AND saves new rules with the tabs' hostnames. Rules grow over time. Local applies this directly without a preview. |
+| **Group Once** | AI creates the group, no rule saved. Fast, no confirmation. |
+| **Zen Edit Prompt** (Ollama only) | Opens Zen's edit modal for each new group so you can rename/recolor. |
+| **Fresh Rebuild** | Re-tidies **all** tabs into fresh categories, ignoring your rules. Like Arc Browser's Tidy. Local Fresh names clusters from a shared hostname (e.g. `Github & Gitlab`), an intent label (e.g. `Reading`), or extracted keywords (e.g. `Yu-Gi-Oh`) depending on the strongest signal in the cluster. Ollama Fresh runs a third-phase fuzzy-name dedupe that catches near-duplicates like `Content Unavailable` + `Content Unavailability`. |
+| **Preview Only** (Ollama only) | Shows the proposed plan in a modal first. You toggle each group keep/skip, optionally click "Re-assign" to redo the unkept tabs, then Apply. It applies groups but does not save new domain rules. |
 
-![Plan Mode modal](docs/images/plan-mode-modal.png)
+## Modes when AI matches an existing group
 
-Ollama can also propose reviewed title chips (`T`) when **AI title learning** is set to **Review and Save (Simple)** or **Review and Save (Complex)**. Simple proposes chips from tab titles only; Complex can also fetch a small amount of page context and propose chips from that content. Proposed title chips appear in a separate title-rules section of the preview modal and are saved only when kept. Click a title chip to skip just that chip, or click the title-rule card to skip the whole proposal. Local Fresh Categories uses titles as transient clustering context but never saves title terms.
+| Mode | What happens |
+|---|---|
+| **Move + Save Domain** | Moves the tab into the matched group and adds its domain to that group's saved rule. |
+| **Move Once** | Moves the tab now but does not update saved rules. The same tab may need AI again later. |
+
+![Preview Only modal](docs/images/plan-mode-modal.png)
+
+Ollama can also propose reviewed title chips (`T`) when **AI title learning** is set to **Review and Save (Simple)** or **Review and Save (Complex)**. Simple proposes chips from tab titles only; Complex can also fetch a small amount of page context and propose chips from that content. Proposed title chips appear in a separate title-rules section of the preview modal and are saved only when kept. Click a title chip to skip just that chip, or click the title-rule card to skip the whole proposal. Local Fresh Rebuild uses titles as transient clustering context but never saves title terms.
 
 ![Title chip plan mode](docs/images/title-chips.png)
 
-### Stickiness in Auto-add / Always-add
+### Stickiness in Preview + Save Rule / Move + Save Domain
 
-In Ollama **Auto-add** (new group) and **Always-add** (existing group) modes, tabs already sitting in a group you organized by hand won't be pulled out into a brand-new AI-invented group. They can still move into another *existing* group if the AI is confident. This keeps your manual organization from getting churned every time you click the wand.
+In Ollama **Preview + Save Rule** (new group) and **Move + Save Domain** (existing group) modes, tabs already sitting in a group you organized by hand won't be pulled out into a brand-new AI-invented group. They can still move into another *existing* group if the AI is confident. This keeps your manual organization from getting churned every time you click the wand.
 
 ## Other settings
 

@@ -1,9 +1,9 @@
-// Zen Tab Wand — Plan Mode preview modal (Phase 4d).
+// Zen Tab Wand — AI grouping preview modal.
 //
 // Interactive modal that lets the user review the AI's proposed groupings
-// before they're applied. Used both for explicit "Plan Mode" (identify-only)
-// and as a confirmation step in Auto-add / Always-add modes (so the user
-// can veto rule mutations before they hit the table).
+// before they're applied. Used both for Preview Only (identify-only) and as a
+// confirmation step in Review and Save / Always-add modes (so the user can
+// veto rule mutations before they hit the table).
 //
 // Features:
 //   - Toggle each proposed NEW group keep/skip (accent fill = kept).
@@ -21,7 +21,7 @@
 //   "new:<lowercase-name>"      for newGroups entries
 //   "existing:<lowercase-name>" for assignedToExisting target groups
 // This avoids collisions when the AI proposes a new group with the same name
-// as an existing rule (rare but possible in auto-add modes).
+// as an existing rule (rare but possible in Review and Save mode).
 
 import { LOG, h } from "./config.mjs";
 

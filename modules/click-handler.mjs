@@ -354,11 +354,11 @@ export const handleOrganizeClick = async () => {
             })));
           }
 
-          // Decide whether to show the Plan Mode modal:
-          //   - Plan Mode (identify-only) → always show (it IS the modal mode);
+          // Decide whether to show the preview modal:
+          //   - Preview Only (identify-only) → always show (it IS the modal mode);
           //     applies to BOTH engines (local Fresh is hostname-named so the
           //     modal lets the user rename / re-assign before applying)
-          //   - Auto-add / Always-add → show so user can veto rule mutations
+          //   - Review and Save / Always-add → show so user can veto rule mutations
           //     before they hit the rules table. Ollama-only — those modes imply
           //     LLM-style semantic naming.
           //   - Transient (either) → no modal (it's just a temp move per user)
@@ -369,12 +369,12 @@ export const handleOrganizeClick = async () => {
           let modalReason = "";
           if (isIdentifyOnly) {
             showModal = true;
-            modalReason = "Plan Mode";
+            modalReason = "Preview Only";
           } else if (aiEngine === "ollama" && !isFreshMode && newGroupBehavior !== "prompt") {
             const existingBehavior = getAIExistingBehavior();
             const flags = [];
-            if (existingBehavior === "always-add") flags.push("always-add");
-            if (newGroupBehavior === "auto-add") flags.push("auto-add");
+            if (existingBehavior === "always-add") flags.push("Always-add");
+            if (newGroupBehavior === "auto-add") flags.push("Review and Save");
             if (flags.length > 0) {
               showModal = true;
               modalReason = flags.join(" + ");
@@ -398,7 +398,7 @@ export const handleOrganizeClick = async () => {
           }
 
           if (showModal) {
-            console.debug(`${LOG} Plan Mode modal opening (${modalReason}) — user must confirm before rules mutate`);
+            console.debug(`${LOG} preview modal opening (${modalReason}) — user must confirm before applying`);
             planToApply = await showPreviewModal({
               plan: pass2,
               // "Re-assign to new" — open-ended clustering for pending tabs.
@@ -461,7 +461,7 @@ export const handleOrganizeClick = async () => {
             const ai = applyPass2(planToApply, workspaceId, rules);
             console.log(`${LOG} Pass 2 applied: ${ai.movedToExisting} tab(s) → existing groups, ${ai.newGroupsCreated} new group(s), ${ai.rulesGrown} domain rule add(s), ${ai.titleTermsGrown || 0} title term add(s), ${ai.newRulesCreated} new rule(s)`);
             // Use the filtered plan's skipped list for the post-apply cleanup
-            // (in Plan Mode, this includes tabs from un-kept groups, which
+            // (in Preview Only, this includes tabs from un-kept groups, which
             // should also get ungrouped from their pre-tidy containers).
             pass2 = planToApply;
 

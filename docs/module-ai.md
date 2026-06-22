@@ -82,7 +82,7 @@ When the modal is applied, `applyPass2()` treats reviewed title proposals as rul
 
 ### `ai-new-group-behavior`
 
-For Local, only Fresh Categories and Plan Mode create new groups. Transient/Auto-add title learning is ignored locally. For full rule-learning behavior, use the Ollama engine. See [module-ollama.md](module-ollama.md).
+For Local, only Fresh Categories and Review and Save create new groups. Transient title learning is ignored locally. For full reviewed rule-learning behavior, use the Ollama engine. See [module-ollama.md](module-ollama.md).
 
 ## Failure modes
 

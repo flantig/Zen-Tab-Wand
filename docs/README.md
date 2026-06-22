@@ -5,7 +5,7 @@ A Zen Browser Sine mod that auto-organizes tabs into groups using two passes:
 1. **Pass 1 — Deterministic rules**: a URL/title-to-group map (e.g. `calendar.google.com → Calendar`, or title contains `invoice → Work`) defined in the settings widget, matched first-match-wins within the selected match source.
 2. **Pass 2 — AI fallback** (shipped): unmatched tabs are sent to one of two engines:
    - **Local** (`modules/ai.mjs`): Firefox's bundled `Mozilla/smart-tab-embedding` model. Existing-group classification only; no new-group invention.
-   - **Ollama** (`modules/ollama.mjs`): HTTP client to a local Ollama daemon at `localhost:11434`. Does both existing-group classification and AI-invented new-group clustering, with a merge pass and an optional interactive Plan Mode modal for user review.
+   - **Ollama** (`modules/ollama.mjs`): HTTP client to a local Ollama daemon at `localhost:11434`. Does both existing-group classification and AI-invented new-group clustering, with a merge pass and an optional interactive Preview Only modal for user review.
 
 Rules grow via three explicit paths: the settings UI rule editor, the tab right-click "Add to Rule…" submenu (browser-hooks.mjs's `setupTabContextMenu`), and AI Pass 2 when it decides to grow rules.
 
@@ -21,7 +21,7 @@ Rules grow via three explicit paths: the settings UI rule editor, the tab right-
 | `modules/*.mjs` | One module per concern. See per-file docs below. |
 | `modules/ai.mjs` | Pass 2 — local AI engine (Firefox's bundled ML, existing-group classification only). |
 | `modules/ollama.mjs` | Pass 2 — Ollama engine (full classification + clustering + merge pass + warmup). |
-| `modules/preview-modal.mjs` | Plan Mode interactive modal (group keep/skip, re-assign-to-planned, re-assign-to-new). |
+| `modules/preview-modal.mjs` | Preview modal used by Preview Only and rule-learning confirmation flows (group keep/skip, re-assign-to-planned, re-assign-to-new). |
 | `modules/ui-toast.mjs` | Shared toast/system-notification helper. |
 
 ## New to chrome scripting?
@@ -57,5 +57,5 @@ See [architecture.md](architecture.md) for the full picture; the short version:
 - [module-emoji-picker.md](module-emoji-picker.md) — local emoji/icon picker
 
 Modules without dedicated docs (small / self-explanatory — see source comments):
-- `modules/preview-modal.mjs` — Plan Mode interactive `<dialog>` (keep/skip groups, re-assign actions, applied/cancelled signal)
+- `modules/preview-modal.mjs` — preview `<dialog>` (keep/skip groups, re-assign actions, applied/cancelled signal)
 - `modules/ui-toast.mjs` — `showToast(message, options)` wrapper around `gZenUIManager.showToast` with an alerts-service fallback

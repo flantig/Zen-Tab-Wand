@@ -34,8 +34,8 @@ The function the toolbar button invokes. Sequences all the passes.
        "ollama" → ollama.mjs runPass2Ollama() OR runPass2OllamaFresh()
                   depending on ai-new-group-behavior
 14. Preview gate (if applicable):
-       Plan Mode always opens showPreviewModal(plan). Ollama rule-mutating
-       flows (Always-add existing rules and/or Auto-add new rules) also open it
+       Preview Only always opens showPreviewModal(plan). Ollama rule-mutating
+       flows (Always-add existing rules and/or Review and Save new rules) also open it
        so the user can approve rule changes first. If AI title learning is
        enabled, reviewed T chips are attached here before the modal opens; this
        can also open an audit-only modal for tabs already sitting in rule-named

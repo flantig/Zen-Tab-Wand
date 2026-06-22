@@ -102,11 +102,11 @@
     "property": "extensions.zen-auto-organize.ai-new-group-behavior",
     "defaultValue": "auto-add",
     "options": [
-      { "label": "Auto-add — Create the group and save it as a new rule", "value": "auto-add" },
+      { "label": "Review and Save — Preview, create the group, and save a new rule", "value": "auto-add" },
       { "label": "Transient — Create the group only, no rule added", "value": "transient" },
       { "label": "Prompt — Open Zen's edit modal to confirm name and color", "value": "prompt" },
       { "label": "Fresh categories — Re-tidy ALL tabs into AI-invented groups, ignoring rules", "value": "fresh-categories" },
-      { "label": "Plan Mode — Preview the AI's plan, pick which groups to keep, optionally re-assign", "value": "identify-only" }
+      { "label": "Preview Only — Review/re-assign groups before applying, no new rule saved", "value": "identify-only" }
     ]
   },
   {
