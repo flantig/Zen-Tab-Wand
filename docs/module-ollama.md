@@ -31,7 +31,7 @@ Earlier merge-prompt iterations asked the model to return nested `[{name, from: 
 
 ## Title learning
 
-When `ai-title-learning` is `"review-save-simple"` or `"review-save-complex"`, Ollama rule-mutating flows can add reviewed `T` chips to rules. Simple mode proposes chips from title text only. Complex mode also fetches bounded page snippets and can propose chips from that content. Candidate filtering prefers distinctive nouns/names/acronyms and drops generic metadata/action words before the model sees them. The helper can audit tabs already inside rule-named groups via `plan.titleAuditGroups`, so title proposals can appear even when Pass 2 has no unmatched tabs to move. The preview modal shows title proposals in their own section; users can skip individual chips or the whole title-rule card, and applying the modal saves only kept chips.
+When `ai-title-learning` is `"review-save-simple"` or `"review-save-complex"`, Ollama rule-mutating flows can add reviewed `T` chips to rules. Simple mode proposes chips from title text only. Complex mode also fetches a bounded set of page snippets and can propose chips from that content. Candidate collection is intentionally small: it drops generic metadata/action words, caps fetched pages and model candidates, and asks the model to map each chip to an existing or newly named rule category. The helper can audit tabs already inside rule-named groups via `plan.titleAuditGroups`, so title proposals can appear even when Pass 2 has no unmatched tabs to move. The preview modal shows title proposals in their own section; users can skip individual chips or the whole title-rule card, and applying the modal saves only kept chips.
 
 ## Lifecycle: warmup + keep-alive
 

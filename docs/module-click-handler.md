@@ -37,8 +37,9 @@ The function the toolbar button invokes. Sequences all the passes.
        Plan Mode always opens showPreviewModal(plan). Ollama rule-mutating
        flows (Always-add existing rules and/or Auto-add new rules) also open it
        so the user can approve rule changes first. If AI title learning is
-       enabled, reviewed T chips are attached here before the modal opens.
-       Modal returns the user-edited plan. Apply waits for confirmation.
+       enabled, reviewed T chips are attached here before the modal opens; this
+       can also open an audit-only modal for tabs already sitting in rule-named
+       groups. Modal returns the user-edited plan. Apply waits for confirmation.
 15. applyPass2(plan, ws, rules)       — execute moves; create new groups;
                                         optionally grow rules array
 16. (fresh-categories mode) dissolve any group with zero tabs after rebuild

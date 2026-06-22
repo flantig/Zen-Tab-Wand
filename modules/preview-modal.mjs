@@ -303,6 +303,9 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
           item.skipped = !item.skipped;
           render();
         });
+        pill.addEventListener("keydown", (e) => {
+          e.stopPropagation();
+        });
         if (item.warning) pill.title = item.warning;
         pill.appendChild(h("span", { class: "zao-pill-kind", text: "T" }));
         pill.appendChild(h("span", { text: item.term }));

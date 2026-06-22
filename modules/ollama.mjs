@@ -46,12 +46,17 @@ const stripMetaPrefix = (s) => s
   .trim();
 
 const TITLE_TERM_LIMIT = 3;
+const TITLE_CONTENT_FETCH_LIMIT = 30;
+const TITLE_CANDIDATE_LIMIT = 24;
 const TITLE_TERM_STOPWORDS = new Set([
   "about", "after", "again", "all", "and", "are", "article", "best", "blog",
-  "buy", "can", "com", "content", "for", "from", "guide", "home", "how",
+  "buy", "can", "com", "comment", "comments", "content", "description",
+  "download", "for", "from", "guide", "home", "how", "image", "images",
   "into", "latest", "login", "news", "official", "online", "order", "page",
-  "pages", "post", "read", "reddit", "search", "share", "site", "the", "this",
-  "tips", "today", "topic", "type", "upload", "video", "website", "with",
+  "pages", "photo", "photos", "platform", "platforms", "post", "privacy",
+  "product", "profile", "read", "reddit", "search", "service", "services",
+  "share", "site", "stream", "summary", "support", "the", "this", "tips",
+  "today", "topic", "type", "upload", "video", "watch", "website", "with",
   "you", "your",
 ]);
 
@@ -138,9 +143,9 @@ const fetchContentCandidateSnippets = async (groups) => {
       if (seen.has(url)) continue;
       seen.add(url);
       jobs.push({ group, tab });
-      if (jobs.length >= 30) break;
+      if (jobs.length >= TITLE_CONTENT_FETCH_LIMIT) break;
     }
-    if (jobs.length >= 30) break;
+    if (jobs.length >= TITLE_CONTENT_FETCH_LIMIT) break;
   }
 
   const snippets = await Promise.all(jobs.map(async ({ group, tab }) => ({
@@ -193,7 +198,7 @@ const collectTitleTermCandidates = async (plan, rules, mode) => {
       (b.count - a.count) ||
       (a.term.length - b.term.length)
     )
-    .slice(0, 24)
+    .slice(0, TITLE_CANDIDATE_LIMIT)
     .map((c) => ({
       term: c.term,
       titles: [...c.titles],
@@ -219,7 +224,6 @@ export const proposeTitleTermPatches = async (plan, rules, host, model, mode = "
     return [];
   }
 
-  console.debug(`${LOG} Ollama title learning:`, parsed);
   const existingRuleNameByLower = new Map(
     (rules || []).filter((r) => r?.name).map((r) => [r.name.toLocaleLowerCase(), r.name])
   );
