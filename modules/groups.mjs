@@ -404,7 +404,7 @@ export const dissolveStaleGroups = (workspaceId, rules) => {
 
 /**
  * Remove any tab-group element with zero tabs. Useful after operations that
- * yank tabs out of their groups (Phase 4c "Fresh categories" Arc-Tidy mode
+ * yank tabs out of their groups (Phase 4c "Fresh Rebuild" Arc-Tidy mode
  * is the main caller) — Zen sometimes auto-collapses empties but not always,
  * so this is a defensive cleanup.
  *

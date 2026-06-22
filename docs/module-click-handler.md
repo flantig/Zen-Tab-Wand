@@ -35,7 +35,7 @@ The function the toolbar button invokes. Sequences all the passes.
                   depending on ai-new-group-behavior
 14. Preview gate (if applicable):
        Preview Only always opens showPreviewModal(plan). Ollama rule-mutating
-       flows (Always-add existing rules and/or Review and Save new rules) also open it
+       flows (Always-add existing rules and/or Preview + Save Rule new rules) also open it
        so the user can approve rule changes first. If AI title learning is
        enabled, reviewed T chips are attached here before the modal opens; this
        can also open an audit-only modal for tabs already sitting in rule-named

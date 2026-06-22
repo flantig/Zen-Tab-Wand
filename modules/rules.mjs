@@ -306,8 +306,8 @@ export const getLocalAIBatchSize = () => {
 //
 // On the Local engine the existing-behavior row is hidden in settings — the
 // new-group-behavior dropdown drives BOTH decisions instead. Map:
-//   Review and Save → always-add  (grow the rule)
-//   Transient → transient   (don't grow)
+//   Preview + Save Rule → always-add  (grow the rule)
+//   Group Once → transient   (don't grow)
 //   Fresh     → transient   (Fresh ignores rules; the answer doesn't matter)
 export const getAIExistingBehavior = () => {
   try {
@@ -321,7 +321,7 @@ export const getAIExistingBehavior = () => {
 };
 
 // What to do when AI clusters a set of unmatched tabs into a new group.
-//   "auto-add"  — Review and Save: create the tab-group AND a matching rule (default)
+//   "auto-add"  — Preview + Save Rule: create the tab-group AND a matching rule (default)
 //   "transient" — create the tab-group but don't add a rule
 //   "prompt"    — create the tab-group and open Zen's edit modal so user can confirm
 export const getAINewGroupBehavior = () => {

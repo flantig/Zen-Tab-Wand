@@ -6,7 +6,7 @@
 //     new groups for tabs that don't fit. Single call, then a merge pass to
 //     consolidate over-specialized categories.
 //   - Fresh classifier: ignores existing rules entirely, re-clusters every
-//     tab from scratch. Powers the "Fresh categories" and Preview Only flows.
+//     tab from scratch. Powers the "Fresh Rebuild" and Preview Only flows.
 //
 // All transport (fetch, ping, warmup, JSON-validate) lives in
 // ollama-transport.mjs. All prompt strings live in ollama-prompts.mjs. This
@@ -605,7 +605,7 @@ export const runPass2Ollama = async (unmatched, rules) => {
 };
 
 /**
- * Phase 4c — "Fresh categories" mode. Considers ALL eligible tabs (matched
+ * Phase 4c — "Fresh Rebuild" mode. Considers ALL eligible tabs (matched
  * and unmatched) and proposes a complete re-grouping from scratch, ignoring
  * the existing rule names entirely. `assignedToExisting` is always empty.
  *

@@ -76,13 +76,13 @@ unmatched tabs (from runPass1)
 
 ### Local Fresh title context
 
-Local Fresh Categories uses title + hostname + fetched page snippet text as transient clustering input. It never persists `titleTerms`; title persistence is Ollama-only and reviewed in the preview modal as separate title-rule proposals.
+Local Fresh Rebuild uses title + hostname + fetched page snippet text as transient clustering input. It never persists `titleTerms`; title persistence is Ollama-only and reviewed in the preview modal as separate title-rule proposals.
 
 When the modal is applied, `applyPass2()` treats reviewed title proposals as rule patches: existing rules get deduped `titleTerms[]`, and new title-only rules can be created with empty `domains[]`. Skipped title cards and individually skipped title chips are ignored.
 
 ### `ai-new-group-behavior`
 
-For Local, only Fresh Categories and Review and Save create new groups. Transient title learning is ignored locally. For full reviewed rule-learning behavior, use the Ollama engine. See [module-ollama.md](module-ollama.md).
+For Local, only Fresh Rebuild and Preview + Save Rule create new groups. Group Once title learning is ignored locally. For full reviewed rule-learning behavior, use the Ollama engine. See [module-ollama.md](module-ollama.md).
 
 ## Failure modes
 

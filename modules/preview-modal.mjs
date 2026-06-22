@@ -2,7 +2,7 @@
 //
 // Interactive modal that lets the user review the AI's proposed groupings
 // before they're applied. Used both for Preview Only (identify-only) and as a
-// confirmation step in Review and Save / Always-add modes (so the user can
+// confirmation step in Preview + Save Rule / Always-add modes (so the user can
 // veto rule mutations before they hit the table).
 //
 // Features:
@@ -21,7 +21,7 @@
 //   "new:<lowercase-name>"      for newGroups entries
 //   "existing:<lowercase-name>" for assignedToExisting target groups
 // This avoids collisions when the AI proposes a new group with the same name
-// as an existing rule (rare but possible in Review and Save mode).
+// as an existing rule (rare but possible in Preview + Save Rule mode).
 
 import { LOG, h } from "./config.mjs";
 

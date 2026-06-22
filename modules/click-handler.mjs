@@ -358,12 +358,12 @@ export const handleOrganizeClick = async () => {
           //   - Preview Only (identify-only) → always show (it IS the modal mode);
           //     applies to BOTH engines (local Fresh is hostname-named so the
           //     modal lets the user rename / re-assign before applying)
-          //   - Review and Save / Always-add → show so user can veto rule mutations
+          //   - Preview + Save Rule / Always-add → show so user can veto rule mutations
           //     before they hit the rules table. Ollama-only — those modes imply
           //     LLM-style semantic naming.
-          //   - Transient (either) → no modal (it's just a temp move per user)
-          //   - Prompt → no modal (Zen handles per-group via its own edit modal)
-          //   - Fresh-categories → no modal (no rule mutations happen here)
+          //   - Group Once (either) → no modal (it's just a temp move per user)
+          //   - Zen Edit Prompt → no modal (Zen handles per-group via its own edit modal)
+          //   - Fresh Rebuild → no modal (no rule mutations happen here)
           let planToApply = pass2;
           let showModal = false;
           let modalReason = "";
@@ -374,7 +374,7 @@ export const handleOrganizeClick = async () => {
             const existingBehavior = getAIExistingBehavior();
             const flags = [];
             if (existingBehavior === "always-add") flags.push("Always-add");
-            if (newGroupBehavior === "auto-add") flags.push("Review and Save");
+            if (newGroupBehavior === "auto-add") flags.push("Preview + Save Rule");
             if (flags.length > 0) {
               showModal = true;
               modalReason = flags.join(" + ");
