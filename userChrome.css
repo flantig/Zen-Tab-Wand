@@ -114,13 +114,14 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   justify-content: start !important;
   column-gap: 16px !important;
   align-items: center !important;
+  padding: 6px 2px !important;
 }
 
 .zao-control-row > :last-child {
   justify-self: start !important;
 }
 
-.zao-match-mode-row > :first-child {
+.zao-control-row > .sineItemPreferenceLabel {
   margin-inline-start: 0 !important;
   padding-inline-start: 0 !important;
   text-indent: 0 !important;
@@ -132,6 +133,7 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   justify-content: start !important;
   column-gap: 16px !important;
   align-items: center !important;
+  padding: 6px 2px !important;
 }
 
 .zao-checkbox-right input[type="checkbox"],
@@ -140,7 +142,7 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 .zao-checkbox-control {
   justify-self: start !important;
   margin-inline-start: 0 !important;
-  transform: translateX(14px) !important;
+  transform: none !important;
 }
 
 .zao-pref-hidden,
@@ -254,6 +256,13 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   row-gap: 8px !important;
   align-items: center !important;
   padding: 6px 2px !important;
+}
+
+.zao-backup-actions-row {
+  display: flex !important;
+  grid-template-columns: none !important;
+  justify-content: flex-start !important;
+  padding: 6px 2px 18px 2px !important;
 }
 
 .zao-action-pref-title {

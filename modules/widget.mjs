@@ -677,9 +677,7 @@ export const buildCustomIconsEditor = () => {
 // ──────────────────────────────────────────────────────────────────────────────
 export const buildBackupRestoreSection = () => {
   const section = h("div", { class: "zao-backup-section" });
-  const row = h("div", { class: "zao-action-pref" });
-  const text = h("div", { class: "zao-action-pref-text" });
-  text.setAttribute("aria-hidden", "true");
+  const row = h("div", { class: "zao-action-pref zao-backup-actions-row" });
   const bar = h("div", { class: "zao-action-pref-actions" });
 
   const exportBtn = h("button", { class: "zao-backup-btn", text: "Export" });
@@ -864,7 +862,6 @@ export const buildBackupRestoreSection = () => {
   });
   bar.appendChild(importBtn);
 
-  row.appendChild(text);
   row.appendChild(bar);
   section.appendChild(row);
   return section;

@@ -182,16 +182,15 @@ const CONTROL_ROW_PREFS = [
   CONFIG.AI_LOCAL_BATCH_SIZE_PREF,
 ];
 
-const trimLeadingText = (node) => {
-  for (const child of node.childNodes) {
-    if (child.nodeType === Node.TEXT_NODE) {
-      child.textContent = child.textContent.replace(/^\s+/, "");
-      if (child.textContent.trim()) return true;
-    } else if (trimLeadingText(child)) {
-      return true;
+const normalizeMatchModeLabel = (row) => {
+  const label = row.querySelector(".sineItemPreferenceLabel") || row.firstElementChild;
+  if (!label) return;
+  label.textContent = label.textContent.replace(/^\s+/, "");
+  for (const attr of ["value", "label"]) {
+    if (label.hasAttribute?.(attr)) {
+      label.setAttribute(attr, label.getAttribute(attr).replace(/^\s+/, ""));
     }
   }
-  return false;
 };
 
 const alignSettingRows = (dialog) => {
@@ -201,7 +200,7 @@ const alignSettingRows = (dialog) => {
     row.classList.add("zao-control-row");
     if (prefName === CONFIG.MATCH_MODE_PREF) {
       row.classList.add("zao-match-mode-row");
-      trimLeadingText(row);
+      normalizeMatchModeLabel(row);
     }
   }
   for (const prefName of CHECKBOX_RIGHT_PREFS) {
