@@ -210,8 +210,8 @@ const alignSettingRows = (dialog) => {
     const checkbox = row.querySelector('input[type="checkbox"], checkbox, [role="checkbox"]');
     if (checkbox) {
       checkbox.classList.add("zao-checkbox-control");
-      if (row.lastElementChild !== checkbox) {
-        row.appendChild(checkbox);
+      if (row.firstElementChild !== checkbox) {
+        row.insertBefore(checkbox, row.firstElementChild);
       }
     }
   }
