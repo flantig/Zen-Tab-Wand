@@ -535,7 +535,8 @@ export const buildCustomIconsEditor = () => {
   const bar = h("div", { class: "zao-custom-icons-bar" });
   const upload = h("button", { class: "zao-backup-btn", text: "Upload icons..." });
   upload.type = "button";
-  const grid = h("div", { class: "zao-custom-icons-grid" });
+  const manage = h("button", { class: "zao-backup-btn", text: "Manage icons" });
+  manage.type = "button";
 
   const persistIcons = () => writeCustomIconsPref(icons);
   const clearDeletedIconFromRules = (id) => {
@@ -553,7 +554,7 @@ export const buildCustomIconsEditor = () => {
     }
   };
 
-  const render = () => {
+  const renderPopoverGrid = (grid) => {
     grid.replaceChildren();
     for (const icon of icons) {
       const btn = h("button", { class: "zao-custom-icon-choice" });
@@ -568,13 +569,53 @@ export const buildCustomIconsEditor = () => {
         icons = icons.filter((item) => item.id !== icon.id);
         persistIcons();
         clearDeletedIconFromRules(icon.id);
-        render();
+        renderPopoverGrid(grid);
       });
       grid.appendChild(btn);
     }
     if (!icons.length) {
       grid.appendChild(h("div", { class: "zao-custom-icons-empty", text: "No custom icons" }));
     }
+  };
+
+  const openManager = (anchor) => {
+    document.querySelectorAll(".zao-custom-icons-popover").forEach((p) => p.remove());
+    const pop = h("div", { class: "zao-custom-icons-popover" });
+    const grid = h("div", { class: "zao-custom-icons-grid" });
+    pop.appendChild(grid);
+    renderPopoverGrid(grid);
+
+    const dialog = anchor.closest(".sineItemPreferenceDialog") || document.body;
+    dialog.appendChild(pop);
+
+    const r = anchor.getBoundingClientRect();
+    const popRect = pop.getBoundingClientRect();
+    const gap = CONFIG.POPOVER_GAP_PX;
+    const maxLeft = Math.max(gap, window.innerWidth - popRect.width - gap);
+    pop.style.left = `${Math.min(Math.max(gap, r.left), maxLeft)}px`;
+    const aboveTop = r.top - popRect.height - gap;
+    pop.style.top = `${aboveTop >= gap ? aboveTop : r.bottom + gap}px`;
+
+    const closeIfOutside = (e) => {
+      if (!pop.contains(e.target) && e.target !== anchor) {
+        pop.remove();
+        cleanup();
+      }
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        pop.remove();
+        cleanup();
+      }
+    };
+    const cleanup = () => {
+      document.removeEventListener("mousedown", closeIfOutside, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+    setTimeout(() => {
+      document.addEventListener("mousedown", closeIfOutside, true);
+      document.addEventListener("keydown", onKey, true);
+    }, 0);
   };
 
   upload.addEventListener("click", () => {
@@ -599,17 +640,20 @@ export const buildCustomIconsEditor = () => {
         icons.push(makeCustomIcon(file, dataUrl));
       }
       persistIcons();
-      render();
       picker.remove();
     });
     document.documentElement.appendChild(picker);
     picker.click();
   });
+  manage.addEventListener("click", (e) => {
+    e.stopPropagation();
+    icons = readCustomIconsPref();
+    openManager(manage);
+  });
 
   bar.appendChild(upload);
+  bar.appendChild(manage);
   container.appendChild(bar);
-  container.appendChild(grid);
-  render();
   return container;
 };
 

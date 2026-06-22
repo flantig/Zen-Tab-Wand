@@ -712,11 +712,23 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+}
+.zao-custom-icons-popover {
+  position: fixed;
+  z-index: 999999;
+  box-sizing: border-box;
+  width: 224px;
+  padding: 8px;
+  background: Canvas;
+  color: CanvasText;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
 }
 .zao-custom-icons-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 40px);
+  grid-template-columns: repeat(4, 40px);
+  justify-content: center;
   gap: 5px;
   align-items: center;
 }
