@@ -168,3 +168,32 @@ Output ONLY a JSON object mapping each original category name (left side) to its
   "Office Supplies": "Shopping"
 }`;
 };
+
+export const buildTitleTermPrompt = (rules, candidates) => {
+  const candidateLines = candidates.map((c, i) => {
+    const titles = (c.titles || []).slice(0, 3).map((t) => `"${String(t).replace(/\s+/g, " ").slice(0, TITLE_LIMIT)}"`).join("; ");
+    return `${i}. ${c.term} — seen in titles: ${titles}`;
+  }).join("\n");
+
+  return `Assign each title keyword below to the browser rule category it should teach.
+
+Important:
+- The keyword must be categorized by its underlying topic, not by the website where it appeared.
+- Search-result tabs from google.com, bing.com, duckduckgo.com, etc. should NOT become "Search" just because the host is a search engine.
+- Example: "mtg" in titles like "mtg commander - Google Search" should map to a collectible-card-game category, not Search.
+- Use an existing label when it fits. Otherwise invent a short Title Case label.
+- Use "none" when the keyword is too generic or you cannot infer a useful topic.
+
+Existing labels:
+${renderCategoryList(rules)}
+
+Title keywords:
+${candidateLines}
+
+Output ONLY a JSON object mapping each exact keyword to its chosen label or "none".
+Example:
+{
+  "mtg": "Collectible Card Games",
+  "calendar": "none"
+}`;
+};

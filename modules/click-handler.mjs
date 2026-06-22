@@ -353,16 +353,8 @@ export const handleOrganizeClick = async () => {
           if (showModal) {
             if (!isIdentifyOnly && !isFreshMode && aiEngine === "ollama" && getAITitleLearning() === "review-save") {
               const existingBehavior = getAIExistingBehavior();
-              const mutableGroups = new Set();
-              if (existingBehavior === "always-add") {
-                for (const a of pass2.assignedToExisting) mutableGroups.add(String(a.groupName || "").toLocaleLowerCase());
-              }
-              if (newGroupBehavior === "auto-add") {
-                for (const g of pass2.newGroups) mutableGroups.add(String(g.name || "").toLocaleLowerCase());
-              }
-              if (mutableGroups.size > 0) {
-                pass2.rulePatches = proposeTitleTermPatches(pass2, rules)
-                  .filter((patch) => mutableGroups.has(String(patch.groupName || "").toLocaleLowerCase()));
+              if (existingBehavior === "always-add" || newGroupBehavior === "auto-add") {
+                pass2.rulePatches = await proposeTitleTermPatches(pass2, rules, getOllamaHost(), getOllamaModel());
               }
             }
             console.debug(`${LOG} Plan Mode modal opening (${modalReason}) — user must confirm before rules mutate`);

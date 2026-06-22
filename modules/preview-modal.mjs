@@ -27,6 +27,7 @@ import { LOG, h } from "./config.mjs";
 
 const newKey = (name) => `new:${name.toLowerCase()}`;
 const existingKey = (name) => `existing:${name.toLowerCase()}`;
+const titleKey = (name) => `title:${name.toLowerCase()}`;
 
 const clonePlan = (p) => ({
   assignedToExisting: (p.assignedToExisting || []).map((a) => ({ ...a })),
@@ -72,6 +73,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
     const kept = new Set();
     for (const g of currentPlan.newGroups) kept.add(newKey(g.name));
     for (const a of currentPlan.assignedToExisting) kept.add(existingKey(a.groupName));
+    for (const patch of currentPlan.rulePatches) kept.add(titleKey(patch.groupName));
 
     const dialog = h("dialog", { class: "zao-preview-dialog" });
 
@@ -134,14 +136,15 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
 
       const existingTargets = groupExistingByTarget(currentPlan.assignedToExisting);
       const totalKept = countKept(existingTargets);
-      const totalGroups = currentPlan.newGroups.length + existingTargets.length;
+      const totalGroups = currentPlan.newGroups.length + existingTargets.length + currentPlan.rulePatches.length;
       const skippedCount = currentPlan.skipped.length;
       const pendingForReassign = pendingTabs(existingTargets).length;
+      const proposalLabel = currentPlan.rulePatches.length > 0 ? "proposal(s)" : "group(s)";
 
       const summaryText =
         totalGroups === 0 && skippedCount === 0
           ? "The AI found nothing to group."
-          : `${totalKept}/${totalGroups} group(s) kept · ${skippedCount} tab(s) ungrouped`;
+          : `${totalKept}/${totalGroups} ${proposalLabel} kept · ${skippedCount} tab(s) ungrouped`;
       body.appendChild(h("p", { class: "zao-preview-summary", text: summaryText }));
 
       if (currentPlan.newGroups.length > 0) {
@@ -165,6 +168,18 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
         body.appendChild(sec);
       }
 
+      if (currentPlan.rulePatches.length > 0) {
+        const sec = h("section", { class: "zao-preview-section" });
+        sec.appendChild(h("h3", {
+          class: "zao-preview-section-title",
+          text: "Proposed title rules — click to keep / skip",
+        }));
+        for (const patch of currentPlan.rulePatches) {
+          sec.appendChild(renderTitleRuleBlock(patch));
+        }
+        body.appendChild(sec);
+      }
+
       if (skippedCount > 0) {
         const sec = h("section", { class: "zao-preview-section zao-preview-skipped" });
         sec.appendChild(h("h3", {
@@ -183,7 +198,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
       //   (which classifies against the user's full rules table, regardless
       //   of what's kept in the modal).
       // Re-assign-to-new: just needs pending tabs.
-      const keptGroupCount = totalKept;
+      const keptGroupCount = keptBuckets().length;
       reassignToPlannedBtn.disabled =
         pendingForReassign === 0 || keptGroupCount === 0 || typeof onAssignToPlanned !== "function";
       reassignToPlannedBtn.title =
@@ -236,20 +251,45 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
       }));
       block.appendChild(head);
 
-      const patch = titlePatchFor(g.name);
-      if (patch?.titleTerms?.length) block.appendChild(renderRulePatch(patch));
-
       const ul = h("ul", { class: "zao-preview-tab-list" });
       for (const t of g.tabs) ul.appendChild(renderTabRow(t));
       block.appendChild(ul);
       return block;
     }
 
-    function titlePatchFor(groupName) {
-      const key = String(groupName || "").toLocaleLowerCase();
-      return (currentPlan.rulePatches || []).find((patch) =>
-        String(patch.groupName || "").toLocaleLowerCase() === key
-      );
+    function renderTitleRuleBlock(patch) {
+      const key = titleKey(patch.groupName);
+      const isKept = kept.has(key);
+      const classes = ["zao-preview-group", "zao-preview-title-rule"];
+      if (isKept) classes.push("zao-kept");
+      const block = h("div", { class: classes.join(" ") });
+      block.setAttribute("role", "button");
+      block.setAttribute("aria-pressed", isKept ? "true" : "false");
+      block.tabIndex = 0;
+      block.addEventListener("click", () => {
+        if (isKept) kept.delete(key);
+        else kept.add(key);
+        render();
+      });
+      block.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          block.click();
+        }
+      });
+
+      const head = h("div", { class: "zao-preview-group-head" });
+      head.appendChild(h("span", {
+        class: "zao-preview-group-name",
+        text: `${patch.groupName} (${patch.titleTerms.length} title ${patch.titleTerms.length === 1 ? "term" : "terms"})`,
+      }));
+      head.appendChild(h("span", {
+        class: "zao-preview-group-state",
+        text: isKept ? "✓ keep" : "skip",
+      }));
+      block.appendChild(head);
+      block.appendChild(renderRulePatch(patch));
+      return block;
     }
 
     function renderRulePatch(patch) {
@@ -277,6 +317,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
       let n = 0;
       for (const g of currentPlan.newGroups) if (kept.has(newKey(g.name))) n++;
       for (const t of existingTargets) if (kept.has(existingKey(t.name))) n++;
+      for (const patch of currentPlan.rulePatches) if (kept.has(titleKey(patch.groupName))) n++;
       return n;
     }
 
@@ -463,12 +504,8 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
         droppedTabs.push(a.tabInfo);
         return false;
       });
-      const keptGroupNames = new Set([
-        ...finalNewGroups.map((g) => String(g.name || "").toLocaleLowerCase()),
-        ...finalExisting.map((a) => String(a.groupName || "").toLocaleLowerCase()),
-      ]);
       const finalRulePatches = (currentPlan.rulePatches || []).filter((patch) =>
-        keptGroupNames.has(String(patch.groupName || "").toLocaleLowerCase())
+        kept.has(titleKey(patch.groupName))
       );
       cleanup({
         assignedToExisting: finalExisting,

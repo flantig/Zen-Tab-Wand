@@ -111,8 +111,8 @@ Then, if the AI engine is set to anything other than `"off"`:
 11. **runPass2** (ai.mjs **or** ollama.mjs) — depends on `ai-engine` pref:
     - `"local"` → existing-group classification, or Fresh Categories clustering when selected
     - `"ollama"` → unified classify-and-cluster; can also invent new groups
-12. **Preview gate** — Plan Mode always opens `showPreviewModal`; Ollama rule-mutating flows also open it before writing rules. With AI title learning enabled, reviewed `T` chips are proposed from actual tab titles before the modal opens
-13. **applyPass2** — execute the (possibly user-edited) plan: move tabs into existing groups, create new ones, optionally grow rule domains/title terms
+12. **Preview gate** — Plan Mode always opens `showPreviewModal`; Ollama rule-mutating flows also open it before writing rules. With AI title learning enabled, reviewed `T` chips are proposed from actual tab titles as separate title-rule proposals before the modal opens
+13. **applyPass2** — execute the (possibly user-edited) plan: move tabs into existing groups, create new ones, optionally grow rule domains and apply kept title-rule proposals
 14. **fresh-categories cleanup** — if mode is `"fresh-categories"`, dissolve any group that has zero tabs after the rebuild
 
 Finally for every click:

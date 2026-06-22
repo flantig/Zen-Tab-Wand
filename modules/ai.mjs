@@ -783,12 +783,10 @@ const addDomainToRule = (ruleName, hostname, rules) => {
 
 const cleanTitleTerm = (term) => String(term || "").trim();
 
-const titleTermsForGroup = (patches, groupName) => {
-  const key = String(groupName || "").toLocaleLowerCase();
-  return (patches.find((patch) => String(patch.groupName || "").toLocaleLowerCase() === key)?.titleTerms || [])
+const titleTermsFromPatch = (patch) =>
+  (patch?.titleTerms || [])
     .map((item) => cleanTitleTerm(item?.term))
     .filter(Boolean);
-};
 
 const addTitleTermsToRule = (ruleName, terms, rules) => {
   const rule = rules.find((r) => r.name === ruleName);
@@ -866,7 +864,6 @@ export const applyPass2 = (pass2Result, workspaceId, rules) => {
       }
       if (existingBehavior === "always-add") {
         if (addDomainToRule(a.groupName, a.tabInfo.hostname, rules)) rulesGrown++;
-        titleTermsGrown += addTitleTermsToRule(a.groupName, titleTermsForGroup(rulePatches, a.groupName), rules);
       }
     } catch (e) {
       console.error(`${LOG} AI: failed to move tab into "${a.groupName}":`, e);
@@ -904,15 +901,12 @@ export const applyPass2 = (pass2Result, workspaceId, rules) => {
         // so syncAllGroupColors on future tidy-clicks keeps the same color.
         const hostnames = [...new Set(cluster.tabs.map((t) => t.hostname).filter((h) => h))];
         if (hostnames.length > 0 && !rules.some((r) => r.name === cluster.name)) {
-          const titleTerms = titleTermsForGroup(rulePatches, cluster.name);
           rules.push({
             name: cluster.name,
             domains: hostnames,
-            ...(titleTerms.length ? { titleTerms } : {}),
             color,
           });
           newRulesCreated++;
-          titleTermsGrown += titleTerms.length;
         }
       } else if (newGroupBehavior === "prompt") {
         openZenEditModalForGroup(newGroup);
@@ -924,6 +918,22 @@ export const applyPass2 = (pass2Result, workspaceId, rules) => {
     } catch (e) {
       console.error(`${LOG} AI: failed to create new group "${cluster.name}":`, e);
     }
+  }
+
+  // 3. Apply reviewed title-learning patches independently from tab/domain
+  // grouping. These can grow existing rules or create title-only rules.
+  for (const patch of rulePatches) {
+    const name = String(patch.groupName || "").trim();
+    const titleTerms = titleTermsFromPatch(patch);
+    if (!name || titleTerms.length === 0) continue;
+    let rule = rules.find((r) => String(r.name || "").toLocaleLowerCase() === name.toLocaleLowerCase());
+    if (!rule) {
+      const color = pickAvailableColor(usedColors);
+      rule = { name, domains: [], titleTerms: [], color };
+      rules.push(rule);
+      newRulesCreated++;
+    }
+    titleTermsGrown += addTitleTermsToRule(rule.name, titleTerms, rules);
   }
 
   // Persist any rule changes (rule grow + new rules).

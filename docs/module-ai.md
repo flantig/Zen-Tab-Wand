@@ -27,7 +27,7 @@ Ships with Zen/Firefox. First load takes 1–3s (model warm-up). Subsequent call
 | Name | Notes |
 |---|---|
 | `runPass2(unmatched, rules, workspaceId)` | Pure planning — returns assignment plan without mutating DOM. `newGroups` is always `[]` in the local-AI path. |
-| `applyPass2(plan, workspaceId, rules)` | Executes the plan: moves tabs into existing groups, optionally grows domains/titleTerms, and optionally creates rules. Mutates the `rules` array and writes it to the pref. |
+| `applyPass2(plan, workspaceId, rules)` | Executes the plan: moves tabs into existing groups, optionally grows domains, creates new domain rules, and applies kept title-rule patches. Mutates the `rules` array and writes it to the pref. |
 
 ## Pipeline
 
@@ -76,7 +76,7 @@ unmatched tabs (from runPass1)
 
 ### Local Fresh title context
 
-Local Fresh Categories uses title + hostname + fetched page snippet text as transient clustering input. It never persists `titleTerms`; title persistence is Ollama-only and reviewed in the preview modal.
+Local Fresh Categories uses title + hostname + fetched page snippet text as transient clustering input. It never persists `titleTerms`; title persistence is Ollama-only and reviewed in the preview modal as separate title-rule proposals.
 
 ### `ai-new-group-behavior`
 

@@ -24,6 +24,7 @@ import {
   buildUnifiedPrompt,
   buildFreshPrompt,
   buildMergePrompt,
+  buildTitleTermPrompt,
 } from "./ollama-prompts.mjs";
 
 // Re-export the transport surface that callers outside this module still need
@@ -70,30 +71,6 @@ const isUsefulTitleToken = (token, hostname = "") => {
   return true;
 };
 
-const collectTitleTermStats = (tabs) => {
-  const stats = new Map();
-  for (const tab of tabs || []) {
-    const seenInTab = new Set();
-    for (const raw of titleTokens(tab?.title)) {
-      const term = raw.replace(/^[^\w]+|[^\w]+$/g, "");
-      if (!isUsefulTitleToken(term, tab?.hostname)) continue;
-      const key = normalizeTitleTerm(term);
-      if (seenInTab.has(key)) continue;
-      seenInTab.add(key);
-      if (!stats.has(key)) {
-        stats.set(key, { term, count: 0, hosts: new Set() });
-      }
-      const stat = stats.get(key);
-      stat.count++;
-      if (tab?.hostname) stat.hosts.add(tab.hostname);
-      if (stat.term === stat.term.toLocaleLowerCase() && term !== term.toLocaleLowerCase()) {
-        stat.term = term;
-      }
-    }
-  }
-  return stats;
-};
-
 const allPlanGroups = (plan) => {
   const byName = new Map();
   for (const g of plan?.newGroups || []) {
@@ -106,60 +83,124 @@ const allPlanGroups = (plan) => {
   return [...byName.values()];
 };
 
-export const proposeTitleTermPatches = (plan, rules) => {
-  const groups = allPlanGroups(plan);
-  if (groups.length === 0) return [];
-
-  const existingTermsByRule = new Map(
-    (rules || []).map((r) => [
-      r.name,
-      new Set((r.titleTerms || []).map(normalizeTitleTerm)),
-    ])
-  );
-  const existingTermOwners = new Map();
+const existingTitleTermKeys = (rules) => {
+  const out = new Set();
   for (const rule of rules || []) {
     for (const term of rule.titleTerms || []) {
       const key = normalizeTitleTerm(term);
-      if (!key) continue;
-      if (!existingTermOwners.has(key)) existingTermOwners.set(key, new Set());
-      existingTermOwners.get(key).add(rule.name);
+      if (key) out.add(key);
     }
   }
+  return out;
+};
 
-  const statsByGroup = new Map(groups.map((g) => [g.name, collectTitleTermStats(g.tabs)]));
-  const patches = [];
+const collectTitleTermCandidates = (plan, rules) => {
+  const groups = allPlanGroups(plan);
+  if (groups.length === 0) return [];
+
+  const existingTerms = existingTitleTermKeys(rules);
+  const byKey = new Map();
   for (const group of groups) {
-    const existingForGroup = existingTermsByRule.get(group.name) || new Set();
-    const candidates = [...(statsByGroup.get(group.name)?.entries() || [])]
-      .filter(([key, stat]) => !existingForGroup.has(key) && (stat.count >= 2 || stat.hosts.size >= 2))
-      .sort((a, b) => {
-        const statA = a[1];
-        const statB = b[1];
-        return (statB.hosts.size - statA.hosts.size) ||
-          (statB.count - statA.count) ||
-          (statA.term.length - statB.term.length);
-      });
-
-    const titleTerms = [];
-    for (const [key, stat] of candidates) {
-      let warning = "";
-      const otherRuleOwners = [...(existingTermOwners.get(key) || [])]
-        .filter((name) => name !== group.name);
-      if (otherRuleOwners.length > 0) {
-        warning = `Already used by ${otherRuleOwners.join(", ")}`;
-      } else {
-        const otherGroups = groups
-          .filter((other) => other.name !== group.name)
-          .filter((other) => statsByGroup.get(other.name)?.has(key))
-          .map((other) => other.name);
-        if (otherGroups.length > 0) warning = `Also appears in ${otherGroups.join(", ")}`;
+    for (const tab of group.tabs || []) {
+      const seenInTab = new Set();
+      for (const raw of titleTokens(tab?.title)) {
+        const term = raw.replace(/^[^\w]+|[^\w]+$/g, "");
+        if (!isUsefulTitleToken(term, tab?.hostname)) continue;
+        const key = normalizeTitleTerm(term);
+        if (existingTerms.has(key) || seenInTab.has(key)) continue;
+        seenInTab.add(key);
+        if (!byKey.has(key)) {
+          byKey.set(key, { term, count: 0, hosts: new Set(), titles: new Set(), sourceGroups: new Set() });
+        }
+        const candidate = byKey.get(key);
+        candidate.count++;
+        if (tab?.hostname) candidate.hosts.add(tab.hostname);
+        if (tab?.title) candidate.titles.add(tab.title);
+        if (group.name) candidate.sourceGroups.add(group.name);
+        if (candidate.term === candidate.term.toLocaleLowerCase() && term !== term.toLocaleLowerCase()) {
+          candidate.term = term;
+        }
       }
-      titleTerms.push(warning ? { term: stat.term, warning } : { term: stat.term });
-      if (titleTerms.length >= TITLE_TERM_LIMIT) break;
     }
-    if (titleTerms.length > 0) patches.push({ groupName: group.name, titleTerms });
   }
-  return patches;
+
+  return [...byKey.values()]
+    .filter((c) => c.count >= 2 || c.hosts.size >= 2)
+    .sort((a, b) =>
+      (b.hosts.size - a.hosts.size) ||
+      (b.count - a.count) ||
+      (a.term.length - b.term.length)
+    )
+    .slice(0, 24)
+    .map((c) => ({
+      term: c.term,
+      titles: [...c.titles],
+      sourceGroups: [...c.sourceGroups],
+    }));
+};
+
+const GENERIC_TITLE_RULE_NAMES = new Set([
+  "search",
+  "web search",
+  "google",
+  "google search",
+  "bing",
+  "duckduckgo",
+]);
+
+export const proposeTitleTermPatches = async (plan, rules, host, model) => {
+  const candidates = collectTitleTermCandidates(plan, rules);
+  if (candidates.length === 0) return [];
+
+  const prompt = buildTitleTermPrompt(rules, candidates);
+  const r = await ollamaGenerateJson(host, model, prompt);
+  if (!r.ok) {
+    console.warn(`${LOG} Ollama title learning failed (${r.errorType}: ${r.error})`);
+    return [];
+  }
+  const parsed = r.parsed;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    console.warn(`${LOG} Ollama title learning returned non-object JSON`);
+    return [];
+  }
+
+  console.debug(`${LOG} Ollama title learning:`, parsed);
+  const existingRuleNameByLower = new Map(
+    (rules || []).filter((r) => r?.name).map((r) => [r.name.toLocaleLowerCase(), r.name])
+  );
+  const candidateByKey = new Map(candidates.map((c) => [normalizeTitleTerm(c.term), c]));
+  const byGroup = new Map();
+
+  for (const [rawTerm, rawValue] of Object.entries(parsed)) {
+    const idx = Number.parseInt(rawTerm, 10);
+    const candidate = candidateByKey.get(normalizeTitleTerm(rawTerm)) ||
+      (Number.isFinite(idx) ? candidates[idx] : null);
+    if (!candidate) continue;
+    const rawGroupName = rawValue && typeof rawValue === "object"
+      ? (rawValue.category || rawValue.groupName || rawValue.label || rawValue.name)
+      : rawValue;
+    const groupRaw = stripMetaPrefix(String(rawGroupName || "").trim());
+    const groupLower = groupRaw.toLocaleLowerCase();
+    if (!groupRaw || groupLower === "none" || groupLower === "skipped") continue;
+    if (GENERIC_TITLE_RULE_NAMES.has(groupLower)) continue;
+
+    const groupName = existingRuleNameByLower.get(groupLower) || groupRaw;
+    const groupKey = groupName.toLocaleLowerCase();
+    if (!byGroup.has(groupKey)) byGroup.set(groupKey, { groupName, titleTerms: [] });
+    const item = { term: candidate.term };
+    if (!existingRuleNameByLower.has(groupKey)) item.warning = "Creates a title-only rule";
+    if (candidate.sourceGroups.length > 1) {
+      item.warning = item.warning
+        ? `${item.warning}; also appeared in ${candidate.sourceGroups.join(", ")}`
+        : `Also appeared in ${candidate.sourceGroups.join(", ")}`;
+    }
+    byGroup.get(groupKey).titleTerms.push(item);
+  }
+
+  return [...byGroup.values()].map((patch) => ({
+    groupName: patch.groupName,
+    titleTerms: patch.titleTerms.slice(0, TITLE_TERM_LIMIT),
+  }));
 };
 
 // ─── Classify into existing rules ────────────────────────────────────────────
