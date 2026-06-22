@@ -532,7 +532,14 @@ export const teardownSkipPrefObserver = () => {
 export const buildCustomIconsEditor = () => {
   let icons = readCustomIconsPref();
   const container = h("div", { class: "zao-custom-icons-editor" });
-  const bar = h("div", { class: "zao-custom-icons-bar" });
+  const row = h("div", { class: "zao-action-pref" });
+  const text = h("div", { class: "zao-action-pref-text" });
+  text.appendChild(h("div", { class: "zao-action-pref-title", text: "Custom icons" }));
+  text.appendChild(h("div", {
+    class: "zao-action-pref-description",
+    text: "Upload local image icons and manage the custom-only picker list.",
+  }));
+  const bar = h("div", { class: "zao-action-pref-actions" });
   const upload = h("button", { class: "zao-backup-btn", text: "Upload icons..." });
   upload.type = "button";
   const manage = h("button", { class: "zao-backup-btn", text: "Manage icons" });
@@ -653,7 +660,9 @@ export const buildCustomIconsEditor = () => {
 
   bar.appendChild(upload);
   bar.appendChild(manage);
-  container.appendChild(bar);
+  row.appendChild(text);
+  row.appendChild(bar);
+  container.appendChild(row);
   return container;
 };
 
@@ -669,7 +678,14 @@ export const buildCustomIconsEditor = () => {
 // ──────────────────────────────────────────────────────────────────────────────
 export const buildBackupRestoreSection = () => {
   const section = h("div", { class: "zao-backup-section" });
-  const bar = h("div", { class: "zao-backup-row" });
+  const row = h("div", { class: "zao-action-pref" });
+  const text = h("div", { class: "zao-action-pref-text" });
+  text.appendChild(h("div", { class: "zao-action-pref-title", text: "Backup and restore" }));
+  text.appendChild(h("div", {
+    class: "zao-action-pref-description",
+    text: "Export or replace rules, skip domains, and custom icons.",
+  }));
+  const bar = h("div", { class: "zao-action-pref-actions" });
 
   const exportBtn = h("button", { class: "zao-backup-btn", text: "Export" });
   exportBtn.type = "button";
@@ -853,7 +869,9 @@ export const buildBackupRestoreSection = () => {
   });
   bar.appendChild(importBtn);
 
-  section.appendChild(bar);
+  row.appendChild(text);
+  row.appendChild(bar);
+  section.appendChild(row);
   return section;
 };
 

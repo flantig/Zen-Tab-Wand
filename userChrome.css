@@ -193,18 +193,38 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   padding-right: 6px !important;
 }
 
-/* Backup & Restore — just the button row beneath the Sine separator.
-   Header + description come from Sine's native separator + injected
-   .zao-pref-description, no XUL markup created here. */
+/* Action prefs — custom rows that mirror Sine's label/description + control
+   layout while keeping our own buttons. */
 .zao-backup-section {
   margin: 8px 0 !important;
   padding: 0 12px !important;
 }
 
-.zao-backup-row {
-  display: flex !important;
+.zao-action-pref {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
   gap: 8px !important;
-  padding: 0 2px !important;
+  align-items: center !important;
+  padding: 6px 2px !important;
+}
+
+.zao-action-pref-title {
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+}
+
+.zao-action-pref-description {
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  opacity: 0.7 !important;
+  margin-top: 2px !important;
+}
+
+.zao-action-pref-actions {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
 }
 
 .zao-backup-btn {
@@ -220,6 +240,15 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 
 .zao-backup-btn:hover {
   background: color-mix(in srgb, currentColor 16%, transparent) !important;
+}
+
+@media (max-width: 520px) {
+  .zao-action-pref {
+    grid-template-columns: 1fr !important;
+  }
+  .zao-action-pref-actions {
+    justify-content: flex-start !important;
+  }
 }
 
 .zao-header {
@@ -706,12 +735,8 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 }
 
 .zao-custom-icons-editor {
-  padding: 8px 12px;
-}
-.zao-custom-icons-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  margin: 8px 0 !important;
+  padding: 0 12px !important;
 }
 .zao-custom-icons-popover {
   position: fixed;
