@@ -40,16 +40,18 @@ tab-group.zao-has-icon .tab-group-label::before {
   content: var(--zao-tab-group-icon);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex: 0 0 1.15em;
+  width: 1.15em;
+  height: 1.15em;
   margin-inline-end: 0.35em;
   font-size: 1.15em;
   line-height: 1;
-  transform: translateY(-0.12em);
+  transform: none;
 }
 
 tab-group.zao-has-custom-icon .tab-group-label::before {
   content: "";
-  width: 1.15em;
-  height: 1.15em;
   background-image: var(--zao-tab-group-icon-url);
   background-position: center;
   background-repeat: no-repeat;
