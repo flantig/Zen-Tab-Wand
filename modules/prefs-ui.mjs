@@ -182,6 +182,18 @@ const CONTROL_ROW_PREFS = [
   CONFIG.AI_LOCAL_BATCH_SIZE_PREF,
 ];
 
+const trimLeadingText = (node) => {
+  for (const child of node.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      child.textContent = child.textContent.replace(/^\s+/, "");
+      if (child.textContent.trim()) return true;
+    } else if (trimLeadingText(child)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const alignSettingRows = (dialog) => {
   for (const prefName of CONTROL_ROW_PREFS) {
     const row = findPrefRow(dialog, prefName);
@@ -189,6 +201,7 @@ const alignSettingRows = (dialog) => {
     row.classList.add("zao-control-row");
     if (prefName === CONFIG.MATCH_MODE_PREF) {
       row.classList.add("zao-match-mode-row");
+      trimLeadingText(row);
     }
   }
   for (const prefName of CHECKBOX_RIGHT_PREFS) {

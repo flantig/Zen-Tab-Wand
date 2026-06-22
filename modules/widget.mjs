@@ -679,7 +679,7 @@ export const buildBackupRestoreSection = () => {
   const section = h("div", { class: "zao-backup-section" });
   const row = h("div", { class: "zao-action-pref" });
   const text = h("div", { class: "zao-action-pref-text" });
-  text.appendChild(h("div", { class: "zao-action-pref-title", text: "Backup and restore" }));
+  text.setAttribute("aria-hidden", "true");
   const bar = h("div", { class: "zao-action-pref-actions" });
 
   const exportBtn = h("button", { class: "zao-backup-btn", text: "Export" });
