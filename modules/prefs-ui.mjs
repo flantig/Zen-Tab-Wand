@@ -231,6 +231,42 @@ const readSelectedAIEngineFromDialog = (dialog) => {
   return "";
 };
 
+const AI_NEW_GROUP_OPTIONS = {
+  local: new Set(["auto-add", "transient", "fresh-categories"]),
+  ollama: new Set(["auto-add", "transient", "prompt", "fresh-categories", "identify-only"]),
+};
+
+const optionValue = (option) =>
+  option?.value || option?.getAttribute?.("value") || option?.getAttribute?.("data-value") || "";
+
+const setNewGroupOptionsForEngine = (dialog, engine) => {
+  const row = findPrefRow(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF);
+  if (!row) return;
+  const allowed = AI_NEW_GROUP_OPTIONS[engine];
+  if (!allowed) return;
+
+  try {
+    const stored = Services.prefs.getStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "auto-add");
+    if (!allowed.has(stored)) Services.prefs.setStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "auto-add");
+  } catch {}
+
+  for (const option of row.querySelectorAll("option, menuitem")) {
+    const value = optionValue(option);
+    const hidden = value && !allowed.has(value);
+    option.hidden = hidden;
+    option.disabled = hidden;
+    option.setAttribute("aria-hidden", hidden ? "true" : "false");
+  }
+
+  for (const control of row.querySelectorAll("select, menulist")) {
+    const value = optionValue(control);
+    if (value && !allowed.has(value)) {
+      control.value = "auto-add";
+      try { Services.prefs.setStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "auto-add"); } catch {}
+    }
+  }
+};
+
 const updateConditionalFields = (dialog) => {
   // Prefer the visible control because Sine may update the UI before the pref
   // observer sees the committed value. Fall back to the stored pref on reopen.
@@ -268,6 +304,7 @@ const updateConditionalFields = (dialog) => {
   setHidden(rows.ollamaModel,       engine !== "ollama");
   setHidden(rows.ollamaWarmup,      engine !== "ollama");
   setHidden(rows.localBatchSize,    !isLocalOrOllama);
+  setNewGroupOptionsForEngine(dialog, engine);
   alignSettingRows(dialog);
 };
 
