@@ -15,7 +15,7 @@ export const LOG = "[ZenTabWand]";
 // Build tag — mirrors theme.json's `version` for shipped releases, and gets a
 // `+tag.N` suffix for in-progress iterative builds so the Browser Console
 // reveals which build is actually running (vs. a stale module cache).
-export const BUILD_VERSION = "1.0.2";
+export const BUILD_VERSION = "1.0.4";
 
 export const CONFIG = {
   // Init polling — wait for gBrowser/gZenWorkspaces/separator to appear at startup.
@@ -43,6 +43,7 @@ export const CONFIG = {
 
   RULES_PREF: "extensions.zen-auto-organize.rules-json",
   SKIP_DOMAINS_PREF: "extensions.zen-auto-organize.skip-domains-json",
+  CUSTOM_ICONS_PREF: "extensions.zen-auto-organize.custom-icons-json",
   // Set of tab-group LABELS currently collapsed. JSON-encoded string array.
   // Updated on every collapse-toggle; re-applied on every TabGroupCreate so
   // session restore preserves collapsed/expanded state across browser
@@ -51,12 +52,14 @@ export const CONFIG = {
   MINIMAL_STYLE_PREF: "extensions.zen-auto-organize.minimal-style",
   STRICT_RULES_PREF: "extensions.zen-auto-organize.strict-rules",
   MATCH_MODE_PREF: "extensions.zen-auto-organize.match-mode",
+  GRADIENT_STYLE_PREF: "extensions.zen-auto-organize.gradient-style",
 
   // AI Sorting (Pass 2). Engine governed by AI_ENGINE_PREF:
   //   "off"    — no AI pass
   //   "local"  — Firefox's bundled ML engine (modules/ai.mjs), existing-groups only
   //   "ollama" — local Ollama daemon (modules/ollama.mjs), existing + new groups
   AI_ENGINE_PREF: "extensions.zen-auto-organize.ai-engine",
+  AI_TITLE_LEARNING_PREF: "extensions.zen-auto-organize.ai-title-learning",
   AI_EXISTING_BEHAVIOR_PREF: "extensions.zen-auto-organize.ai-existing-behavior",
   AI_NEW_GROUP_BEHAVIOR_PREF: "extensions.zen-auto-organize.ai-new-group-behavior",
   AI_OLLAMA_HOST_PREF: "extensions.zen-auto-organize.ai-ollama-host",
@@ -107,10 +110,11 @@ export const isUnsetLabel = (label) => !label || label === ZEN_UNSET_LABEL;
 // Fallback rules if rules.json is missing or malformed AND the Sine pref is unset.
 export const DEFAULT_RULES = [
   { name: "Calendar", domains: ["calendar.google.com", "connect.garmin.com"] },
-  { name: "AI Tools", domains: ["chat.openai.com", "gemini.google.com", "perplexity.ai"] },
-  { name: "Dev",      domains: ["dashboard.render.com", "github.com", "stackoverflow.com"] },
-  { name: "Shopping", domains: ["amazon.com", "staples.com", "ebay.com"] },
-  { name: "Social",   domains: ["reddit.com", "x.com", "bsky.app"] },
+  { name: "AI Tools", domains: ["chat.openai.com", "chatgpt.com", "gemini.google.com", "perplexity.ai", "claude.ai", "copilot.microsoft.com", "deepseek.com"] },
+  { name: "Dev",      domains: ["dashboard.render.com", "github.com", "stackoverflow.com", "gitlab.com", "developer.mozilla.org", "npmjs.com", "docs.github.com"] },
+  { name: "Shopping", domains: ["amazon.com", "staples.com", "ebay.com", "walmart.com", "target.com"] },
+  { name: "Social",   domains: ["reddit.com", "x.com", "bsky.app", "linkedin.com", "threads.net"] },
+  { name: "Music",    domains: ["open.spotify.com", "soundcloud.com", "music.youtube.com", "mixcloud.com"] },
   { name: "Search",   domains: ["google.com", "duckduckgo.com"] },
 ];
 
@@ -132,6 +136,17 @@ export const PRESET_COLORS = [
 
 export const ZEN_COLOR_NAMES = new Set(PRESET_COLORS.map((c) => c.name));
 export const HEX_BY_NAME = new Map(PRESET_COLORS.map((c) => [c.name, c.hex]));
+
+export const GRADIENT_STYLES = {
+  "left-right": (a, b) => `linear-gradient(90deg, ${a}, ${b})`,
+  "right-left": (a, b) => `linear-gradient(270deg, ${a}, ${b})`,
+  "top-bottom": (a, b) => `linear-gradient(180deg, ${a}, ${b})`,
+  "bottom-top": (a, b) => `linear-gradient(0deg, ${a}, ${b})`,
+  "diagonal-down": (a, b) => `linear-gradient(135deg, ${a}, ${b})`,
+  "diagonal-up": (a, b) => `linear-gradient(45deg, ${a}, ${b})`,
+  "radial": (a, b) => `radial-gradient(circle at center, ${a}, ${b})`,
+};
+export const DEFAULT_GRADIENT_STYLE = "left-right";
 
 export const isValidHex = (s) => typeof s === "string" && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(s);
 export const isZenColorName = (s) => typeof s === "string" && ZEN_COLOR_NAMES.has(s);

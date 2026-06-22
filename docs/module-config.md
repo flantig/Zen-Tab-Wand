@@ -15,6 +15,7 @@ Holds every magic value the rest of the codebase references. No runtime state, n
 | `PRESET_COLORS` | array | The 9 Zen palette colors + hex fallback for picker swatches |
 | `ZEN_COLOR_NAMES` | Set | Set of valid Zen color names for fast lookup |
 | `HEX_BY_NAME` | Map | name → hex (overwritten at runtime by `color-picker.mjs` with live theme values) |
+| `GRADIENT_STYLES` / `DEFAULT_GRADIENT_STYLE` | object / string | Maps stored gradient-style pref values to CSS gradient builders. Default is `"left-right"`. |
 | `isValidHex(s)` | fn | true for `#abc` or `#abcdef` |
 | `isZenColorName(s)` | fn | true if `s` is one of Zen's 9 palette names |
 | `bgForName(name)` | fn | CSS `var(--tab-group-color-name, fallback-hex)` string for swatches |
@@ -33,7 +34,9 @@ SKIP_DOMAINS_PREF             // string pref holding the JSON-encoded skip-domai
 MINIMAL_STYLE_PREF            // bool pref for the address-bar styling toggle
 STRICT_RULES_PREF             // bool pref — eject unmatched tabs from rule-named groups
 MATCH_MODE_PREF               // string: url-only | title-only | url-then-title | title-then-url
+GRADIENT_STYLE_PREF           // string: left-right | right-left | top-bottom | bottom-top | diagonal-down | diagonal-up | radial
 AI_ENGINE_PREF                // string: "" | "local" | "ollama"
+AI_TITLE_LEARNING_PREF        // string: off | review-save-simple | review-save-complex
 AI_EXISTING_BEHAVIOR_PREF     // "always-add" | "transient"
 AI_NEW_GROUP_BEHAVIOR_PREF    // "auto-add" | "transient" | "prompt" | "fresh-categories" | "identify-only"
 AI_OLLAMA_HOST_PREF           // string, default http://localhost:11434

@@ -390,7 +390,7 @@ export const runPass2 = async (unmatched, rules, workspaceId) => {
 //   - 3 unique brands       → "Github, Gitlab & Bitbucket"
 //   - 4+                    → "Github + 3 more"
 //
-// Use Plan Mode (identify-only) so the user can rename clusters before applying.
+// Use Preview Only (identify-only) so the user can rename clusters before applying.
 // Caveat: Mozilla's smart-tab-embedding model clusters by stylistic title
 // similarity (homepage-style pages cluster together regardless of topic), so
 // results are quirky vs. Ollama. The user gets the option; the modal is the
@@ -781,6 +781,29 @@ const addDomainToRule = (ruleName, hostname, rules) => {
   return true;
 };
 
+const cleanTitleTerm = (term) => String(term || "").trim();
+
+const titleTermsFromPatch = (patch) =>
+  (patch?.titleTerms || [])
+    .map((item) => cleanTitleTerm(item?.term))
+    .filter(Boolean);
+
+const addTitleTermsToRule = (ruleName, terms, rules) => {
+  const rule = rules.find((r) => r.name === ruleName);
+  if (!rule || !terms?.length) return 0;
+  if (!Array.isArray(rule.titleTerms)) rule.titleTerms = [];
+  const seen = new Set(rule.titleTerms.map((term) => term.toLocaleLowerCase()));
+  let added = 0;
+  for (const term of terms) {
+    const key = term.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rule.titleTerms.push(term);
+    added++;
+  }
+  return added;
+};
+
 // Pick a Zen palette color that isn't yet in `usedSet`. Falls back to a random
 // preset if all are taken. Mutates `usedSet` to reserve the chosen color so
 // subsequent calls within one apply pass don't double-up.
@@ -817,8 +840,10 @@ export const applyPass2 = (pass2Result, workspaceId, rules) => {
 
   let movedToExisting = 0;
   let rulesGrown = 0;
+  let titleTermsGrown = 0;
   let newGroupsCreated = 0;
   let newRulesCreated = 0;
+  const rulePatches = Array.isArray(pass2Result.rulePatches) ? pass2Result.rulePatches : [];
 
   // Seed the in-use color set from existing rules so new AI groups don't
   // duplicate them. Updated as each new group is created within this batch.
@@ -876,7 +901,11 @@ export const applyPass2 = (pass2Result, workspaceId, rules) => {
         // so syncAllGroupColors on future tidy-clicks keeps the same color.
         const hostnames = [...new Set(cluster.tabs.map((t) => t.hostname).filter((h) => h))];
         if (hostnames.length > 0 && !rules.some((r) => r.name === cluster.name)) {
-          rules.push({ name: cluster.name, domains: hostnames, color });
+          rules.push({
+            name: cluster.name,
+            domains: hostnames,
+            color,
+          });
           newRulesCreated++;
         }
       } else if (newGroupBehavior === "prompt") {
@@ -891,8 +920,24 @@ export const applyPass2 = (pass2Result, workspaceId, rules) => {
     }
   }
 
-  // Persist any rule changes (rule grow + new rules).
-  if (rulesGrown > 0 || newRulesCreated > 0) writeRulesPref(rules);
+  // 3. Apply reviewed title-learning patches independently from tab/domain
+  // grouping. These can grow existing rules or create title-only rules.
+  for (const patch of rulePatches) {
+    const name = String(patch.groupName || "").trim();
+    const titleTerms = titleTermsFromPatch(patch);
+    if (!name || titleTerms.length === 0) continue;
+    let rule = rules.find((r) => String(r.name || "").toLocaleLowerCase() === name.toLocaleLowerCase());
+    if (!rule) {
+      const color = pickAvailableColor(usedColors);
+      rule = { name, domains: [], titleTerms: [], color };
+      rules.push(rule);
+      newRulesCreated++;
+    }
+    titleTermsGrown += addTitleTermsToRule(rule.name, titleTerms, rules);
+  }
 
-  return { movedToExisting, rulesGrown, newGroupsCreated, newRulesCreated };
+  // Persist any rule changes (rule grow + new rules).
+  if (rulesGrown > 0 || titleTermsGrown > 0 || newRulesCreated > 0) writeRulesPref(rules);
+
+  return { movedToExisting, rulesGrown, titleTermsGrown, newGroupsCreated, newRulesCreated };
 };

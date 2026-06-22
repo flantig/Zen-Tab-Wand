@@ -1,22 +1,54 @@
 // Zen Tab Wand — settings rules editor widget.
-// Builds the pill table (Category | Domains) with +/- buttons, color swatch per row,
+// Builds the pill table (Category | Matches) with +/- buttons, color/icon controls per row,
 // hex input, and live persistence to the rules pref. Also wires a pref observer so
 // external changes (right-click "Add to Rule…" submenu, AI Pass 2, Import) refresh the table in real time.
 
 import { CONFIG, LOG, h } from "./config.mjs";
-import { readRulesPref, writeRulesPref, readSkipDomainsPref, writeSkipDomainsPref } from "./rules.mjs";
+import {
+  readRulesPref,
+  sanitizeRules,
+  writeRulesPref,
+  readSkipDomainsPref,
+  writeSkipDomainsPref,
+} from "./rules.mjs";
 import {
   openColorPopover,
   updateSwatchAppearance,
 } from "./color-picker.mjs";
+import {
+  openEmojiPopover,
+  updateIconButtonAppearance,
+} from "./emoji-picker.mjs";
+import { syncAllGroupColors } from "./groups.mjs";
+import {
+  dataUrlToIconDataUrl,
+  fileToIconDataUrl,
+  makeCustomIcon,
+  readCustomIconsPref,
+  writeCustomIconsPref,
+} from "./custom-icons.mjs";
 
 let rulesPrefObserver = null;
+
+export const syncLiveGroupAppearances = (rules) => {
+  try {
+    const browserWin = Services.wm.getMostRecentWindow("navigator:browser");
+    const browserDoc = browserWin?.document;
+    if (!browserDoc) return;
+    syncAllGroupColors(null, rules, browserDoc);
+  } catch (e) {
+    console.warn(`${LOG} live group appearance sync failed:`, e);
+  }
+};
 
 export const buildRulesEditor = (rules) => {
   const container = h("div");
   container.className = "zao-rules-editor";
 
-  const persist = () => writeRulesPref(rules);
+  const persist = () => {
+    writeRulesPref(rules);
+    syncLiveGroupAppearances(rules);
+  };
 
   // Forward-declared because some helpers (e.g. renderPill's remove button) need
   // to call render() to redraw the whole table after a mutation. They're defined
@@ -114,7 +146,7 @@ export const buildRulesEditor = (rules) => {
     swatch.className = "zao-swatch";
     swatch.setAttribute("role", "button");
     swatch.setAttribute("tabindex", "0");
-    updateSwatchAppearance(swatch, rule.color);
+    updateSwatchAppearance(swatch, rule.color, rule.color2);
     const open = (e) => {
       e.stopPropagation();
       openColorPopover(rule, swatch, persist);
@@ -124,6 +156,16 @@ export const buildRulesEditor = (rules) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(e); }
     });
     cell.appendChild(swatch);
+
+    const icon = h("button");
+    icon.type = "button";
+    icon.className = "zao-icon-button";
+    updateIconButtonAppearance(icon, rule.icon);
+    icon.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openEmojiPopover(rule, icon, persist);
+    });
+    cell.appendChild(icon);
     return cell;
   };
 
@@ -289,7 +331,7 @@ export const buildRulesEditor = (rules) => {
     const header = h("div");
     header.className = "zao-header";
     header.appendChild(h("div")); // grip column (no label)
-    header.appendChild(h("div")); // color column (no label)
+    header.appendChild(h("div")); // color/icon column (no label)
     const c1 = h("div");
     c1.textContent = "Category";
     header.appendChild(c1);
@@ -499,29 +541,167 @@ export const teardownSkipPrefObserver = () => {
   skipPrefObserver = null;
 };
 
+export const buildCustomIconsEditor = () => {
+  let icons = readCustomIconsPref();
+  const container = h("div", { class: "zao-custom-icons-editor" });
+  const row = h("div", { class: "zao-action-pref" });
+  const text = h("div", { class: "zao-action-pref-text" });
+  text.appendChild(h("div", {
+    class: "zao-action-pref-title",
+    text: "Custom Icons — Upload local image icons and manage the custom-only picker list. Recommended 128x128; will resize if different.",
+  }));
+  const bar = h("div", { class: "zao-action-pref-actions" });
+  const upload = h("button", { class: "zao-backup-btn", text: "Upload icons..." });
+  upload.type = "button";
+  const manage = h("button", { class: "zao-backup-btn", text: "Manage icons" });
+  manage.type = "button";
+
+  const persistIcons = () => writeCustomIconsPref(icons);
+  const clearDeletedIconFromRules = (id) => {
+    const rules = readRulesPref({ keepIncomplete: true }) || [];
+    let changed = false;
+    for (const rule of rules) {
+      if (rule.icon === id) {
+        delete rule.icon;
+        changed = true;
+      }
+    }
+    if (changed) {
+      writeRulesPref(rules);
+      syncLiveGroupAppearances(rules);
+    }
+  };
+
+  const renderPopoverGrid = (grid) => {
+    grid.replaceChildren();
+    for (const icon of icons) {
+      const btn = h("button", { class: "zao-custom-icon-choice" });
+      btn.type = "button";
+      btn.title = `Remove ${icon.name}`;
+      btn.setAttribute("aria-label", `Remove ${icon.name}`);
+      const img = h("img", { class: "zao-emoji-img" });
+      img.src = icon.dataUrl;
+      img.alt = "";
+      btn.appendChild(img);
+      btn.addEventListener("click", () => {
+        icons = icons.filter((item) => item.id !== icon.id);
+        persistIcons();
+        clearDeletedIconFromRules(icon.id);
+        renderPopoverGrid(grid);
+      });
+      grid.appendChild(btn);
+    }
+    if (!icons.length) {
+      grid.appendChild(h("div", { class: "zao-custom-icons-empty", text: "No custom icons" }));
+    }
+  };
+
+  const openManager = (anchor) => {
+    document.querySelectorAll(".zao-custom-icons-popover").forEach((p) => p.remove());
+    const pop = h("div", { class: "zao-custom-icons-popover" });
+    const grid = h("div", { class: "zao-custom-icons-grid" });
+    pop.appendChild(grid);
+    renderPopoverGrid(grid);
+
+    const dialog = anchor.closest(".sineItemPreferenceDialog") || document.body;
+    dialog.appendChild(pop);
+
+    const r = anchor.getBoundingClientRect();
+    const popRect = pop.getBoundingClientRect();
+    const gap = CONFIG.POPOVER_GAP_PX;
+    const maxLeft = Math.max(gap, window.innerWidth - popRect.width - gap);
+    pop.style.left = `${Math.min(Math.max(gap, r.left), maxLeft)}px`;
+    const aboveTop = r.top - popRect.height - gap;
+    pop.style.top = `${aboveTop >= gap ? aboveTop : r.bottom + gap}px`;
+
+    const closeIfOutside = (e) => {
+      if (!pop.contains(e.target) && e.target !== anchor) {
+        pop.remove();
+        cleanup();
+      }
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        pop.remove();
+        cleanup();
+      }
+    };
+    const cleanup = () => {
+      document.removeEventListener("mousedown", closeIfOutside, true);
+      document.removeEventListener("keydown", onKey, true);
+    };
+    setTimeout(() => {
+      document.addEventListener("mousedown", closeIfOutside, true);
+      document.addEventListener("keydown", onKey, true);
+    }, 0);
+  };
+
+  upload.addEventListener("click", () => {
+    const picker = h("input");
+    picker.type = "file";
+    picker.accept = "image/png,image/jpeg,image/webp,image/gif,image/svg+xml";
+    picker.multiple = true;
+    picker.addEventListener("change", async () => {
+      const files = Array.from(picker.files || []);
+      for (const file of files) {
+        if (!file.type.startsWith("image/")) continue;
+        if (file.size > 8 * 1024 * 1024) {
+          alert(`${file.name} is too large. Please use an image under 8 MB.`);
+          continue;
+        }
+        try {
+          const dataUrl = await fileToIconDataUrl(file);
+          icons.push(makeCustomIcon(file, dataUrl));
+        } catch (e) {
+          console.warn(`${LOG} failed to resize custom icon "${file.name}":`, e);
+          alert(`${file.name} could not be imported. Please try another image.`);
+        }
+      }
+      persistIcons();
+      picker.remove();
+    });
+    document.documentElement.appendChild(picker);
+    picker.click();
+  });
+  manage.addEventListener("click", (e) => {
+    e.stopPropagation();
+    icons = readCustomIconsPref();
+    openManager(manage);
+  });
+
+  bar.appendChild(upload);
+  bar.appendChild(manage);
+  row.appendChild(text);
+  row.appendChild(bar);
+  container.appendChild(row);
+  return container;
+};
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Backup & Restore — just the Export / Import buttons. The section header and
 // description come from Sine's native separator (declared in preferences.json)
 // and our SECTION_DESCRIPTIONS list (injected by prefs-ui.mjs).
 //
-// Export shape (v1):  { "rules": [...], "skipDomains": [...] }
+// Export shape (v1):  { "rules": [...], "skipDomains": [...], "customIcons": [...] }
 // Import accepts:
-//   • that object shape (overwrites both prefs)
+//   • that object shape (overwrites whichever prefs are present)
 //   • a bare array (treated as rules-only, for backwards compat with v0 exports)
 // ──────────────────────────────────────────────────────────────────────────────
 export const buildBackupRestoreSection = () => {
   const section = h("div", { class: "zao-backup-section" });
-  const bar = h("div", { class: "zao-backup-row" });
+  const row = h("div", { class: "zao-action-pref zao-backup-actions-row" });
+  const bar = h("div", { class: "zao-action-pref-actions" });
 
   const exportBtn = h("button", { class: "zao-backup-btn", text: "Export" });
   exportBtn.type = "button";
-  exportBtn.title = "Download current rules + skip-domains as a JSON file";
+  exportBtn.title = "Download current rules, skip domains, and custom icons as a JSON file";
   exportBtn.addEventListener("click", async () => {
     const payload = {
       // keepIncomplete: true so a user's in-progress rules are included in
       // the backup — otherwise restoring would silently drop them.
       rules: readRulesPref({ keepIncomplete: true }) || [],
       skipDomains: readSkipDomainsPref() || [],
+      customIcons: readCustomIconsPref(),
     };
     const json = JSON.stringify(payload, null, 2);
     // Filename: wand-backup-<N>groups-YYYYMMDD-HHmmss.json — encodes which
@@ -595,7 +775,7 @@ export const buildBackupRestoreSection = () => {
 
   const importBtn = h("button", { class: "zao-backup-btn", text: "Import…" });
   importBtn.type = "button";
-  importBtn.title = "Replace rules + skip-domains from a JSON file";
+  importBtn.title = "Replace rules, skip domains, and custom icons from a JSON file";
   importBtn.addEventListener("click", () => {
     const picker = document.createElementNS("http://www.w3.org/1999/xhtml", "input");
     picker.type = "file";
@@ -610,34 +790,23 @@ export const buildBackupRestoreSection = () => {
         const parsed = JSON.parse(text);
         let importedRules = null;
         let importedSkip = null;
+        let importedIcons = null;
         if (Array.isArray(parsed)) {
           // Legacy v0 format — array of rules only.
           importedRules = parsed;
         } else if (parsed && typeof parsed === "object") {
           if (Array.isArray(parsed.rules)) importedRules = parsed.rules;
           if (Array.isArray(parsed.skipDomains)) importedSkip = parsed.skipDomains;
+          if (Array.isArray(parsed.customIcons)) importedIcons = parsed.customIcons;
         } else {
-          throw new Error("Top-level must be an array or { rules, skipDomains } object");
+          throw new Error("Top-level must be an array or { rules, skipDomains, customIcons } object");
         }
-        if (!importedRules && !importedSkip) throw new Error("Nothing to import (no rules or skipDomains found)");
+        if (!importedRules && !importedSkip && !importedIcons) throw new Error("Nothing to import (no rules, skipDomains, or customIcons found)");
 
         let validRules = null;
         if (importedRules) {
-          validRules = importedRules
-            .map((r) => ({
-              name: typeof r?.name === "string" ? r.name.trim() : "",
-              domains: Array.isArray(r?.domains)
-                ? r.domains.map((d) => String(d).trim()).filter(Boolean)
-                : [],
-              titleTerms: Array.isArray(r?.titleTerms)
-                ? r.titleTerms.map((d) => String(d).trim()).filter(Boolean)
-                : [],
-              ...(typeof r?.color === "string" ? { color: r.color } : {}),
-              ...(typeof r?.color2 === "string" ? { color2: r.color2 } : {}),
-              ...(typeof r?.icon === "string" ? { icon: r.icon } : {}),
-            }))
-            .filter((r) => r.name && (r.domains.length || r.titleTerms.length));
-          if (validRules.length === 0 && !importedSkip) {
+          validRules = sanitizeRules(importedRules);
+          if (validRules.length === 0 && !importedSkip && !importedIcons) {
             throw new Error("No valid rules in import (each needs a name plus domains or title matches)");
           }
         }
@@ -646,6 +815,25 @@ export const buildBackupRestoreSection = () => {
         if (importedSkip) {
           validSkip = importedSkip.map((d) => String(d).trim()).filter(Boolean);
         }
+        const validIcons = importedIcons
+          ? (await Promise.all(importedIcons.map(async (icon) => {
+            const dataUrl = typeof icon?.dataUrl === "string" ? icon.dataUrl.trim() : "";
+            if (!dataUrl.startsWith("data:image/")) return null;
+            return {
+              id: typeof icon?.id === "string" ? icon.id.trim() : "",
+              name: typeof icon?.name === "string" ? icon.name.trim() : "",
+              dataUrl: await dataUrlToIconDataUrl(dataUrl),
+            };
+          }))).filter((icon) => icon?.id.startsWith("custom:"))
+          : null;
+        if (validRules) {
+          const iconIds = new Set((validIcons || readCustomIconsPref()).map((icon) => icon.id));
+          for (const rule of validRules) {
+            if (typeof rule.icon === "string" && rule.icon.startsWith("custom:") && !iconIds.has(rule.icon)) {
+              delete rule.icon;
+            }
+          }
+        }
 
         const current = {
           // Match the widget's view (includes in-progress rules) so the
@@ -653,14 +841,18 @@ export const buildBackupRestoreSection = () => {
           // the editor, not the filtered wand-click count.
           rules: (readRulesPref({ keepIncomplete: true }) || []).length,
           skip: (readSkipDomainsPref() || []).length,
+          icons: readCustomIconsPref().length,
         };
         const summaryLines = [];
         if (validRules) summaryLines.push(`Rules:  ${current.rules} → ${validRules.length}`);
         if (validSkip) summaryLines.push(`Skip:   ${current.skip} → ${validSkip.length}`);
+        if (validIcons) summaryLines.push(`Icons:  ${current.icons} → ${validIcons.length}`);
         if (!window.confirm(`Replace your settings?\n\n${summaryLines.join("\n")}`)) return;
+        if (validIcons) writeCustomIconsPref(validIcons);
         if (validRules) writeRulesPref(validRules);
         if (validSkip) writeSkipDomainsPref(validSkip);
-        console.log(`${LOG} imported${validRules ? ` ${validRules.length} rule(s)` : ""}${validSkip ? ` ${validSkip.length} skip-domain(s)` : ""}`);
+        if (validRules) syncLiveGroupAppearances(validRules);
+        console.log(`${LOG} imported${validRules ? ` ${validRules.length} rule(s)` : ""}${validSkip ? ` ${validSkip.length} skip-domain(s)` : ""}${validIcons ? ` ${validIcons.length} custom icon(s)` : ""}`);
       } catch (e) {
         console.error(`${LOG} import failed:`, e);
         alert(`Import failed: ${e.message}`);
@@ -671,7 +863,8 @@ export const buildBackupRestoreSection = () => {
   });
   bar.appendChild(importBtn);
 
-  section.appendChild(bar);
+  row.appendChild(bar);
+  section.appendChild(row);
   return section;
 };
 

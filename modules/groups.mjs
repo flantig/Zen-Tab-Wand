@@ -2,8 +2,9 @@
 // color application (named via Zen API; hex via CSS variable overrides), and the
 // sort-ungrouped-to-top pass.
 
-import { CONFIG, LOG, isZenColorName, isValidHex } from "./config.mjs";
-import { isMinimalStyle } from "./rules.mjs";
+import { CONFIG, GRADIENT_STYLES, LOG, bgForName, isZenColorName, isValidHex } from "./config.mjs";
+import { findCustomIcon, readCustomIconsPref } from "./custom-icons.mjs";
+import { getGradientStyle, isMinimalStyle } from "./rules.mjs";
 
 // Find an existing tab-group with the given label in the given workspace.
 // Tries direct attribute match first (which doesn't always work because Zen doesn't
@@ -116,6 +117,71 @@ export const applyGroupColor = (groupEl, color) => {
   }
 };
 
+const cssColorFor = (color) => {
+  if (isZenColorName(color)) return bgForName(color);
+  if (isValidHex(color)) return color;
+  return "";
+};
+
+const gradientFor = (color1, color2) =>
+  GRADIENT_STYLES[getGradientStyle()](color1, color2);
+
+const applyGroupIcon = (groupEl, icon, customIcons = readCustomIconsPref()) => {
+  const value = typeof icon === "string" ? icon.trim() : "";
+  if (!value) {
+    groupEl.style.removeProperty("--zao-tab-group-icon");
+    groupEl.style.removeProperty("--zao-tab-group-icon-url");
+    groupEl.classList.remove("zao-has-icon");
+    groupEl.classList.remove("zao-has-custom-icon");
+    return;
+  }
+
+  const custom = findCustomIcon(value, customIcons);
+  if (value.startsWith("custom:") && !custom) {
+    groupEl.style.removeProperty("--zao-tab-group-icon");
+    groupEl.style.removeProperty("--zao-tab-group-icon-url");
+    groupEl.classList.remove("zao-has-icon");
+    groupEl.classList.remove("zao-has-custom-icon");
+    return;
+  }
+
+  groupEl.classList.add("zao-has-icon");
+  if (custom) {
+    groupEl.style.removeProperty("--zao-tab-group-icon");
+    groupEl.style.setProperty("--zao-tab-group-icon-url", `url("${custom.dataUrl.replace(/"/g, '\\"')}")`);
+    groupEl.classList.add("zao-has-custom-icon");
+    return;
+  }
+
+  groupEl.style.setProperty("--zao-tab-group-icon", JSON.stringify(value));
+  groupEl.style.removeProperty("--zao-tab-group-icon-url");
+  groupEl.classList.remove("zao-has-custom-icon");
+};
+
+export const applyGroupAppearance = (groupEl, rule) => {
+  if (!groupEl?.isConnected || !rule) return;
+  const customIcons = readCustomIconsPref();
+  const solidColor = rule.color || rule.color2;
+  if (solidColor) applyGroupColor(groupEl, solidColor);
+  else clearGroupColor(groupEl);
+
+  try {
+    const color1 = cssColorFor(rule.color);
+    const color2 = cssColorFor(rule.color2);
+    if (color1 && color2) {
+      groupEl.style.setProperty("--zao-tab-group-gradient", gradientFor(color1, color2));
+      groupEl.classList.add("zao-has-gradient");
+    } else {
+      groupEl.style.removeProperty("--zao-tab-group-gradient");
+      groupEl.classList.remove("zao-has-gradient");
+    }
+
+    applyGroupIcon(groupEl, rule.icon, customIcons);
+  } catch (e) {
+    console.error(`${LOG} applyGroupAppearance failed:`, e);
+  }
+};
+
 // Strip our custom color overrides (used when minimal style is on, or when a rule's
 // color is cleared).
 export const clearGroupColor = (groupEl) => {
@@ -125,6 +191,12 @@ export const clearGroupColor = (groupEl) => {
     groupEl.style.removeProperty("--tab-group-color-invert");
     groupEl.style.removeProperty("--tab-group-color-pale");
     groupEl.style.removeProperty("--tab-group-line-color");
+    groupEl.style.removeProperty("--zao-tab-group-gradient");
+    groupEl.classList.remove("zao-has-gradient");
+    groupEl.style.removeProperty("--zao-tab-group-icon");
+    groupEl.style.removeProperty("--zao-tab-group-icon-url");
+    groupEl.classList.remove("zao-has-icon");
+    groupEl.classList.remove("zao-has-custom-icon");
   } catch (e) {
     console.error(`${LOG} clearGroupColor failed:`, e);
   }
@@ -140,16 +212,17 @@ export const clearGroupColor = (groupEl) => {
  *                      pref toggles like minimal-style should sync everywhere).
  * @returns number — count of groups visited (NOT count of mutated; some visits are no-ops).
  */
-export const syncAllGroupColors = (workspaceId, rules) => {
+export const syncAllGroupColors = (workspaceId, rules, root = document) => {
   const minimal = isMinimalStyle();
-  const colorByName = new Map(rules.filter((r) => r.color).map((r) => [r.name, r.color]));
+  const ruleByName = new Map(rules.map((r) => [r.name, r]));
+  const customIcons = readCustomIconsPref();
   const ruleNames = new Set(rules.map((r) => r.name));
 
   let touched = 0;
   const selector = workspaceId
     ? `tab-group:has(tab[zen-workspace-id="${workspaceId}"])`
     : `tab-group`;
-  const groups = document.querySelectorAll(selector);
+  const groups = root.querySelectorAll(selector);
   for (const groupEl of groups) {
     const label = groupEl.getAttribute("label");
     if (!label || !ruleNames.has(label)) continue;
@@ -157,9 +230,10 @@ export const syncAllGroupColors = (workspaceId, rules) => {
     if (minimal) {
       groupEl.classList.add("zao-minimal");
       clearGroupColor(groupEl);
+      applyGroupIcon(groupEl, ruleByName.get(label)?.icon, customIcons);
     } else {
       groupEl.classList.remove("zao-minimal");
-      if (colorByName.has(label)) applyGroupColor(groupEl, colorByName.get(label));
+      if (ruleByName.has(label)) applyGroupAppearance(groupEl, ruleByName.get(label));
       else clearGroupColor(groupEl);
     }
     touched++;
@@ -330,7 +404,7 @@ export const dissolveStaleGroups = (workspaceId, rules) => {
 
 /**
  * Remove any tab-group element with zero tabs. Useful after operations that
- * yank tabs out of their groups (Phase 4c "Fresh categories" Arc-Tidy mode
+ * yank tabs out of their groups (Phase 4c "Fresh Rebuild" Arc-Tidy mode
  * is the main caller) — Zen sometimes auto-collapses empties but not always,
  * so this is a defensive cleanup.
  *

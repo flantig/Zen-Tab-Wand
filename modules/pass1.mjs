@@ -2,7 +2,7 @@
 // Pure logic over rules + tab info; applyPass1 mutates the DOM via gBrowser APIs.
 
 import { LOG } from "./config.mjs";
-import { findExistingGroup, expandIfCollapsed, collapseGroup, applyGroupColor, findSafeInsertAnchor } from "./groups.mjs";
+import { findExistingGroup, expandIfCollapsed, collapseGroup, applyGroupAppearance, findSafeInsertAnchor } from "./groups.mjs";
 import { getMatchMode } from "./rules.mjs";
 
 // Match a hostname against a single rule-domain pattern.
@@ -97,7 +97,7 @@ export const applyPass1 = (byGroup, workspaceId, rules) => {
   let movedToNew = 0;
   const errors = [];
 
-  const colorByName = new Map(rules.filter((r) => r.color).map((r) => [r.name, r.color]));
+  const ruleByName = new Map(rules.map((r) => [r.name, r]));
 
   for (const [groupName, items] of byGroup) {
     // Resolve each item's tab info to its live DOM node (`_tab`) and re-check the
@@ -130,7 +130,7 @@ export const applyPass1 = (byGroup, workspaceId, rules) => {
           gBrowser.moveTabToExistingGroup(tab, existing);
           movedToExisting++;
         }
-        if (colorByName.has(groupName)) applyGroupColor(existing, colorByName.get(groupName));
+        if (ruleByName.has(groupName)) applyGroupAppearance(existing, ruleByName.get(groupName));
         if (wasCollapsed) {
           // Defer one tick so Firefox's tab-insertion bookkeeping completes
           // before we collapse — otherwise the new tab's aria-hidden may
@@ -154,7 +154,7 @@ export const applyPass1 = (byGroup, workspaceId, rules) => {
         if (newGroup) {
           createdGroups++;
           movedToNew += tabsForGroup.length;
-          if (colorByName.has(groupName)) applyGroupColor(newGroup, colorByName.get(groupName));
+          if (ruleByName.has(groupName)) applyGroupAppearance(newGroup, ruleByName.get(groupName));
         } else {
           console.warn(`${LOG} addTabGroup returned no element for "${groupName}"`);
           errors.push({ group: groupName, error: "addTabGroup returned null" });

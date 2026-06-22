@@ -16,7 +16,8 @@ The implementation is split across three files for clarity:
 |---|---|
 | `runPass2Ollama(unmatched, rules, workspaceId, host, model)` | Unified classify + cluster + merge pass. Returns the standard Pass 2 plan shape `{ assignedToExisting, newGroups, skipped }`. |
 | `runPass2OllamaFresh(allTabs, host, model)` | Fresh-categories mode — ignores rules entirely, lets the model invent groups from scratch. Used when `ai-new-group-behavior = "fresh-categories"`. |
-| `classifyExistingGroupsBatch(tabs, rules, host, model)` | Single-pass "assign these tabs into one of these existing groups" call. Used by the Plan Mode modal's **Re-assign to existing** action. |
+| `classifyExistingGroupsBatch(tabs, rules, host, model)` | Single-pass "assign these tabs into one of these existing groups" call. Used by the preview modal's **Re-assign to existing** action. |
+| `proposeTitleTermPatches(plan, rules, host, model)` | Extracts title keyword candidates from grouped tab titles, then asks Ollama which rule category each title term should teach. |
 | `unifiedClassifyOllama` / `clusterUnmatchedNewGroups` / `mergeNewCategoriesPass` | Internal-but-exported building blocks. |
 | `warmupOllama(host, model)`, `checkOllamaReady(host)`, `reportOllamaError(...)` | Re-exported from `ollama-transport.mjs` for callers that don't want to know about the split. |
 
@@ -27,6 +28,10 @@ All `/api/generate` calls use `format: "json"`, `temperature: 0`, and a fixed `s
 ## Why a flat key-value schema for the merge prompt
 
 Earlier merge-prompt iterations asked the model to return nested `[{name, from: [...]}, ...]` arrays. qwen2.5:1.5b consistently emitted malformed nested arrays — missing closing brackets, hallucinated extra fields. Switching to a flat `{ "OriginalGroup": "MergedTarget" }` map fixed it. Same semantic information, far higher success rate.
+
+## Title learning
+
+When `ai-title-learning` is `"review-save-simple"` or `"review-save-complex"`, Ollama rule-mutating flows can add reviewed `T` chips to rules. Simple mode proposes chips from title text only. Complex mode also fetches a bounded set of page snippets and can propose chips from that content. Candidate collection is intentionally small: it drops generic metadata/action words, caps fetched pages and model candidates, and asks the model to map each chip to an existing or newly named rule category. The helper can audit tabs already inside rule-named groups via `plan.titleAuditGroups`, so title proposals can appear even when Pass 2 has no unmatched tabs to move. The preview modal shows title proposals in their own section; users can skip individual chips or the whole title-rule card, and applying the modal saves only kept chips.
 
 ## Lifecycle: warmup + keep-alive
 

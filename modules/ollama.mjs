@@ -6,7 +6,7 @@
 //     new groups for tabs that don't fit. Single call, then a merge pass to
 //     consolidate over-specialized categories.
 //   - Fresh classifier: ignores existing rules entirely, re-clusters every
-//     tab from scratch. Powers the "Fresh categories" and Plan Mode flows.
+//     tab from scratch. Powers the "Fresh Rebuild" and Preview Only flows.
 //
 // All transport (fetch, ping, warmup, JSON-validate) lives in
 // ollama-transport.mjs. All prompt strings live in ollama-prompts.mjs. This
@@ -24,6 +24,7 @@ import {
   buildUnifiedPrompt,
   buildFreshPrompt,
   buildMergePrompt,
+  buildTitleTermPrompt,
 } from "./ollama-prompts.mjs";
 
 // Re-export the transport surface that callers outside this module still need
@@ -44,10 +45,226 @@ const stripMetaPrefix = (s) => s
   .replace(/^\s*(?:new\s+)?(?:category|label|topic|bucket|group)\s*[:\-–]\s*/i, "")
   .trim();
 
+const TITLE_TERM_LIMIT = 3;
+const TITLE_CONTENT_FETCH_LIMIT = 30;
+const TITLE_CANDIDATE_LIMIT = 24;
+const TITLE_TERM_STOPWORDS = new Set([
+  "about", "after", "again", "all", "and", "are", "article", "best", "blog",
+  "buy", "can", "com", "comment", "comments", "content", "description",
+  "download", "for", "from", "guide", "home", "how", "image", "images",
+  "into", "latest", "login", "news", "official", "online", "order", "page",
+  "pages", "photo", "photos", "platform", "platforms", "post", "privacy",
+  "product", "profile", "read", "reddit", "search", "service", "services",
+  "share", "site", "stream", "summary", "support", "the", "this", "tips",
+  "today", "topic", "type", "upload", "video", "watch", "website", "with",
+  "you", "your",
+]);
+
+const titleTokens = (title) => {
+  const text = String(title || "").replace(/\s+/g, " ");
+  return text.match(/[A-Za-z0-9][A-Za-z0-9'’-]{1,38}/g) || [];
+};
+
+const normalizeTitleTerm = (term) =>
+  String(term || "").toLocaleLowerCase().replace(/[’]/g, "'").trim();
+
+const isUsefulTitleToken = (token, hostname = "") => {
+  const cleaned = String(token || "").replace(/^[^\w]+|[^\w]+$/g, "");
+  const norm = normalizeTitleTerm(cleaned);
+  if (norm.length < 3) return false;
+  if (TITLE_TERM_STOPWORDS.has(norm)) return false;
+  if (/^\d+$/.test(norm)) return false;
+  if (hostname && normalizeTitleTerm(hostname).split(".").includes(norm)) return false;
+  return true;
+};
+
+const looksDistinctive = (token) => {
+  const text = String(token || "");
+  const norm = normalizeTitleTerm(text);
+  if (text.length >= 4 && text === text.toLocaleUpperCase() && /[A-Z]/.test(text)) return true;
+  if (/^[A-Z][a-z]+(?:[-'][A-Z]?[a-z]+)*$/.test(text)) return true;
+  if (norm.length >= 6 && /[a-z]/.test(norm)) return true;
+  return false;
+};
+
+const allPlanGroups = (plan) => {
+  const byName = new Map();
+  for (const g of plan?.titleAuditGroups || []) {
+    byName.set(g.name, { name: g.name, tabs: [...(g.tabs || [])] });
+  }
+  for (const g of plan?.newGroups || []) {
+    byName.set(g.name, { name: g.name, tabs: [...(g.tabs || [])] });
+  }
+  for (const a of plan?.assignedToExisting || []) {
+    if (!byName.has(a.groupName)) byName.set(a.groupName, { name: a.groupName, tabs: [] });
+    byName.get(a.groupName).tabs.push(a.tabInfo);
+  }
+  return [...byName.values()];
+};
+
+const existingTitleTermKeys = (rules) => {
+  const out = new Set();
+  for (const rule of rules || []) {
+    for (const term of rule.titleTerms || []) {
+      const key = normalizeTitleTerm(term);
+      if (key) out.add(key);
+    }
+  }
+  return out;
+};
+
+const addTitleCandidate = (byKey, existingTerms, group, tab, raw, snippet = "") => {
+  const term = String(raw || "").replace(/^[^\w]+|[^\w]+$/g, "");
+  if (!isUsefulTitleToken(term, tab?.hostname)) return;
+  const key = normalizeTitleTerm(term);
+  if (existingTerms.has(key)) return;
+  if (!byKey.has(key)) {
+    byKey.set(key, { term, count: 0, hosts: new Set(), titles: new Set(), urls: new Set(), snippets: new Set(), sourceGroups: new Set() });
+  }
+  const candidate = byKey.get(key);
+  candidate.count++;
+  if (tab?.hostname) candidate.hosts.add(tab.hostname);
+  if (tab?.title) candidate.titles.add(tab.title);
+  if (tab?.url) candidate.urls.add(tab.url);
+  if (snippet) candidate.snippets.add(snippet);
+  if (group.name) candidate.sourceGroups.add(group.name);
+  if (candidate.term === candidate.term.toLocaleLowerCase() && term !== term.toLocaleLowerCase()) {
+    candidate.term = term;
+  }
+};
+
+const fetchContentCandidateSnippets = async (groups) => {
+  const seen = new Set();
+  const jobs = [];
+  for (const group of groups) {
+    for (const tab of group.tabs || []) {
+      const url = tab?.url || "";
+      if (!url.startsWith("http://") && !url.startsWith("https://")) continue;
+      if (seen.has(url)) continue;
+      seen.add(url);
+      jobs.push({ group, tab });
+      if (jobs.length >= TITLE_CONTENT_FETCH_LIMIT) break;
+    }
+    if (jobs.length >= TITLE_CONTENT_FETCH_LIMIT) break;
+  }
+
+  const snippets = await Promise.all(jobs.map(async ({ group, tab }) => ({
+    group,
+    tab,
+    snippet: await fetchPageSnippet(tab.url),
+  })));
+  return snippets.filter((entry) => entry.snippet);
+};
+
+const collectTitleTermCandidates = async (plan, rules, mode) => {
+  const groups = allPlanGroups(plan);
+  if (groups.length === 0) return [];
+
+  const existingTerms = existingTitleTermKeys(rules);
+  const byKey = new Map();
+  for (const group of groups) {
+    for (const tab of group.tabs || []) {
+      const seenInTab = new Set();
+      for (const raw of titleTokens(tab?.title)) {
+        const term = raw.replace(/^[^\w]+|[^\w]+$/g, "");
+        if (!isUsefulTitleToken(term, tab?.hostname)) continue;
+        const key = normalizeTitleTerm(term);
+        if (existingTerms.has(key) || seenInTab.has(key)) continue;
+        seenInTab.add(key);
+        addTitleCandidate(byKey, existingTerms, group, tab, term);
+      }
+    }
+  }
+
+  if (mode === "review-save-complex") {
+    const contentEntries = await fetchContentCandidateSnippets(groups);
+    for (const { group, tab, snippet } of contentEntries) {
+      const seenInSnippet = new Set();
+      for (const raw of titleTokens(snippet)) {
+        const term = raw.replace(/^[^\w]+|[^\w]+$/g, "");
+        const key = normalizeTitleTerm(term);
+        if (existingTerms.has(key) || seenInSnippet.has(key)) continue;
+        seenInSnippet.add(key);
+        if (!looksDistinctive(term)) continue;
+        addTitleCandidate(byKey, existingTerms, group, tab, term, snippet);
+      }
+    }
+  }
+
+  return [...byKey.values()]
+    .filter((c) => c.count >= 2 || c.hosts.size >= 2 || (c.snippets.size > 0 && looksDistinctive(c.term)))
+    .sort((a, b) =>
+      (b.hosts.size - a.hosts.size) ||
+      (b.count - a.count) ||
+      (a.term.length - b.term.length)
+    )
+    .slice(0, TITLE_CANDIDATE_LIMIT)
+    .map((c) => ({
+      term: c.term,
+      titles: [...c.titles],
+      urls: [...c.urls],
+      snippets: [...c.snippets],
+      sourceGroups: [...c.sourceGroups],
+    }));
+};
+
+export const proposeTitleTermPatches = async (plan, rules, host, model, mode = "review-save-simple") => {
+  const candidates = await collectTitleTermCandidates(plan, rules, mode);
+  if (candidates.length === 0) return [];
+
+  const prompt = buildTitleTermPrompt(rules, candidates, mode === "review-save-complex" ? "complex" : "simple");
+  const r = await ollamaGenerateJson(host, model, prompt);
+  if (!r.ok) {
+    console.warn(`${LOG} Ollama title learning failed (${r.errorType}: ${r.error})`);
+    return [];
+  }
+  const parsed = r.parsed;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    console.warn(`${LOG} Ollama title learning returned non-object JSON`);
+    return [];
+  }
+
+  const existingRuleNameByLower = new Map(
+    (rules || []).filter((r) => r?.name).map((r) => [r.name.toLocaleLowerCase(), r.name])
+  );
+  const candidateByKey = new Map(candidates.map((c) => [normalizeTitleTerm(c.term), c]));
+  const byGroup = new Map();
+
+  for (const [rawTerm, rawValue] of Object.entries(parsed)) {
+    const idx = Number.parseInt(rawTerm, 10);
+    const candidate = candidateByKey.get(normalizeTitleTerm(rawTerm)) ||
+      (Number.isFinite(idx) ? candidates[idx] : null);
+    if (!candidate) continue;
+    const rawGroupName = rawValue && typeof rawValue === "object"
+      ? (rawValue.category || rawValue.groupName || rawValue.label || rawValue.name)
+      : rawValue;
+    const groupRaw = stripMetaPrefix(String(rawGroupName || "").trim());
+    const groupLower = groupRaw.toLocaleLowerCase();
+    if (!groupRaw || groupLower === "none" || groupLower === "skipped") continue;
+
+    const groupName = existingRuleNameByLower.get(groupLower) || groupRaw;
+    const groupKey = groupName.toLocaleLowerCase();
+    if (!byGroup.has(groupKey)) byGroup.set(groupKey, { groupName, titleTerms: [] });
+    const item = { term: candidate.term };
+    if (!existingRuleNameByLower.has(groupKey)) item.warning = "Creates a title-only rule";
+    if (candidate.sourceGroups.length > 1) {
+      item.warning = item.warning
+        ? `${item.warning}; also appeared in ${candidate.sourceGroups.join(", ")}`
+        : `Also appeared in ${candidate.sourceGroups.join(", ")}`;
+    }
+    byGroup.get(groupKey).titleTerms.push(item);
+  }
+
+  return [...byGroup.values()].map((patch) => ({
+    groupName: patch.groupName,
+    titleTerms: patch.titleTerms.slice(0, TITLE_TERM_LIMIT),
+  }));
+};
+
 // ─── Classify into existing rules ────────────────────────────────────────────
 // Returns Map<tabIndex, groupName | null>. Throws on transport / parse errors;
 // caller surfaces to the user. Used both directly (re-assign-to-planned in
-// the Plan Mode modal) and indirectly via the Ollama Pass 2 driver.
+// the preview modal) and indirectly via the Ollama Pass 2 driver.
 
 export const classifyExistingGroupsBatch = async (unmatched, rules, host, model) => {
   if (!unmatched?.length || !rules?.length) return new Map();
@@ -128,7 +345,7 @@ const clusterUnmatchedNewGroups = async (leftover, host, model) => {
 // Single Ollama call that asks the model, for each tab, EITHER an existing
 // rule category OR a new category name OR "skipped". Followed by a merge pass
 // to consolidate. Used when the engine is Ollama and the flow isn't fresh /
-// Plan Mode (i.e., auto-add / always-add / transient / prompt modes).
+// Preview Only (i.e., auto-add / always-add / transient / prompt modes).
 
 export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
   if (!unmatched?.length) return { assignedToExisting: [], newGroups: [], skipped: [] };
@@ -388,7 +605,7 @@ export const runPass2Ollama = async (unmatched, rules) => {
 };
 
 /**
- * Phase 4c — "Fresh categories" mode. Considers ALL eligible tabs (matched
+ * Phase 4c — "Fresh Rebuild" mode. Considers ALL eligible tabs (matched
  * and unmatched) and proposes a complete re-grouping from scratch, ignoring
  * the existing rule names entirely. `assignedToExisting` is always empty.
  *

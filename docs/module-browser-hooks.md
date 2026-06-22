@@ -43,12 +43,12 @@ Fires when any tab-group element connects to the DOM — including ALL groups re
 
 1. Reads the group's `label`.
 2. Looks up a matching rule.
-3. If the rule has a `color`, defers one tick (so Zen's own color setup finishes) then calls `applyGroupColor(group, rule.color)`.
+3. If the group has a matching rule, defers one tick (so Zen's own color setup finishes) then calls `applyGroupAppearance(group, rule)`.
 
-This is why custom rule colors survive across Zen restarts even when Zen's session storage forgets them.
+This is why custom rule colors, gradients, and icons survive across Zen restarts even when Zen's session storage forgets them.
 
-## minimal-style pref observer
+## Appearance pref observer
 
 `Services.prefs.addObserver` attaches to the global prefs branch and would survive window close (leaking a window reference) if we didn't tear it down. The observer is installed in `setupMinimalStylePrefObserver` and removed in `teardownMinimalStylePrefObserver`, wired into the entry script's `cleanup()`.
 
-On change, it calls `syncAllGroupColors(null, rules)` (null = walk every workspace, not just the active one) so the minimal-style change is visible everywhere immediately.
+On minimal-style or gradient-style changes, it calls `syncAllGroupColors(null, rules)` (null = walk every workspace, not just the active one) so appearance changes are visible everywhere immediately.

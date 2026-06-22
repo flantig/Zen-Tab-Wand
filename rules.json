@@ -2,10 +2,11 @@
   "_comment": "Pass 1 rules. First match wins inside the selected match source. 'domains' match hostnames; optional 'titleTerms' match page titles case-insensitively. Domain pattern semantics: 'host.com' matches the bare host AND any subdomain. '*.host.com' matches subdomains only. Edit and click the button — no restart needed.",
   "rules": [
     { "name": "Calendar", "domains": ["calendar.google.com", "connect.garmin.com"] },
-    { "name": "AI Tools", "domains": ["chat.openai.com", "gemini.google.com", "perplexity.ai"] },
-    { "name": "Dev",      "domains": ["dashboard.render.com", "github.com", "stackoverflow.com"] },
-    { "name": "Shopping", "domains": ["amazon.com", "staples.com", "ebay.com"] },
-    { "name": "Social",   "domains": ["reddit.com", "x.com", "bsky.app"] },
+    { "name": "AI Tools", "domains": ["chat.openai.com", "chatgpt.com", "gemini.google.com", "perplexity.ai", "claude.ai", "copilot.microsoft.com", "deepseek.com"] },
+    { "name": "Dev",      "domains": ["dashboard.render.com", "github.com", "stackoverflow.com", "gitlab.com", "developer.mozilla.org", "npmjs.com", "docs.github.com"] },
+    { "name": "Shopping", "domains": ["amazon.com", "staples.com", "ebay.com", "walmart.com", "target.com"] },
+    { "name": "Social",   "domains": ["reddit.com", "x.com", "bsky.app", "linkedin.com", "threads.net"] },
+    { "name": "Music",    "domains": ["open.spotify.com", "soundcloud.com", "music.youtube.com", "mixcloud.com"] },
     { "name": "Search",   "domains": ["google.com", "duckduckgo.com"] }
   ]
 }

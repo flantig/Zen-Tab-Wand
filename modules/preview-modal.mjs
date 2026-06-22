@@ -1,9 +1,9 @@
-// Zen Tab Wand — Plan Mode preview modal (Phase 4d).
+// Zen Tab Wand — AI grouping preview modal.
 //
 // Interactive modal that lets the user review the AI's proposed groupings
-// before they're applied. Used both for explicit "Plan Mode" (identify-only)
-// and as a confirmation step in Auto-add / Always-add modes (so the user
-// can veto rule mutations before they hit the table).
+// before they're applied. Used both for Preview Only (identify-only) and as a
+// confirmation step in Preview + Save Rule / Move + Save Domain modes (so the user can
+// veto rule mutations before they hit the table).
 //
 // Features:
 //   - Toggle each proposed NEW group keep/skip (accent fill = kept).
@@ -21,16 +21,21 @@
 //   "new:<lowercase-name>"      for newGroups entries
 //   "existing:<lowercase-name>" for assignedToExisting target groups
 // This avoids collisions when the AI proposes a new group with the same name
-// as an existing rule (rare but possible in auto-add modes).
+// as an existing rule (rare but possible in Preview + Save Rule mode).
 
 import { LOG, h } from "./config.mjs";
 
 const newKey = (name) => `new:${name.toLowerCase()}`;
 const existingKey = (name) => `existing:${name.toLowerCase()}`;
+const titleKey = (name) => `title:${name.toLowerCase()}`;
 
 const clonePlan = (p) => ({
   assignedToExisting: (p.assignedToExisting || []).map((a) => ({ ...a })),
   newGroups: (p.newGroups || []).map((g) => ({ name: g.name, tabs: [...g.tabs] })),
+  rulePatches: (p.rulePatches || []).map((patch) => ({
+    groupName: patch.groupName,
+    titleTerms: (patch.titleTerms || []).map((t) => ({ ...t, skipped: Boolean(t.skipped) })),
+  })),
   skipped: [...(p.skipped || [])],
 });
 
@@ -68,6 +73,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
     const kept = new Set();
     for (const g of currentPlan.newGroups) kept.add(newKey(g.name));
     for (const a of currentPlan.assignedToExisting) kept.add(existingKey(a.groupName));
+    for (const patch of currentPlan.rulePatches) kept.add(titleKey(patch.groupName));
 
     const dialog = h("dialog", { class: "zao-preview-dialog" });
 
@@ -130,14 +136,15 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
 
       const existingTargets = groupExistingByTarget(currentPlan.assignedToExisting);
       const totalKept = countKept(existingTargets);
-      const totalGroups = currentPlan.newGroups.length + existingTargets.length;
+      const totalGroups = currentPlan.newGroups.length + existingTargets.length + currentPlan.rulePatches.length;
       const skippedCount = currentPlan.skipped.length;
       const pendingForReassign = pendingTabs(existingTargets).length;
+      const proposalLabel = currentPlan.rulePatches.length > 0 ? "proposal(s)" : "group(s)";
 
       const summaryText =
         totalGroups === 0 && skippedCount === 0
           ? "The AI found nothing to group."
-          : `${totalKept}/${totalGroups} group(s) kept · ${skippedCount} tab(s) ungrouped`;
+          : `${totalKept}/${totalGroups} ${proposalLabel} kept · ${skippedCount} tab(s) ungrouped`;
       body.appendChild(h("p", { class: "zao-preview-summary", text: summaryText }));
 
       if (currentPlan.newGroups.length > 0) {
@@ -161,6 +168,18 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
         body.appendChild(sec);
       }
 
+      if (currentPlan.rulePatches.length > 0) {
+        const sec = h("section", { class: "zao-preview-section" });
+        sec.appendChild(h("h3", {
+          class: "zao-preview-section-title",
+          text: "Proposed title rules — click to keep / skip",
+        }));
+        for (const patch of currentPlan.rulePatches) {
+          sec.appendChild(renderTitleRuleBlock(patch));
+        }
+        body.appendChild(sec);
+      }
+
       if (skippedCount > 0) {
         const sec = h("section", { class: "zao-preview-section zao-preview-skipped" });
         sec.appendChild(h("h3", {
@@ -179,7 +198,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
       //   (which classifies against the user's full rules table, regardless
       //   of what's kept in the modal).
       // Re-assign-to-new: just needs pending tabs.
-      const keptGroupCount = totalKept;
+      const keptGroupCount = keptBuckets().length;
       reassignToPlannedBtn.disabled =
         pendingForReassign === 0 || keptGroupCount === 0 || typeof onAssignToPlanned !== "function";
       reassignToPlannedBtn.title =
@@ -238,6 +257,67 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
       return block;
     }
 
+    function renderTitleRuleBlock(patch) {
+      const key = titleKey(patch.groupName);
+      const isKept = kept.has(key);
+      const classes = ["zao-preview-group", "zao-preview-title-rule"];
+      if (isKept) classes.push("zao-kept");
+      const block = h("div", { class: classes.join(" ") });
+      block.setAttribute("role", "button");
+      block.setAttribute("aria-pressed", isKept ? "true" : "false");
+      block.tabIndex = 0;
+      block.addEventListener("click", () => {
+        if (isKept) kept.delete(key);
+        else kept.add(key);
+        render();
+      });
+      block.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          block.click();
+        }
+      });
+
+      const head = h("div", { class: "zao-preview-group-head" });
+      head.appendChild(h("span", {
+        class: "zao-preview-group-name",
+        text: `${patch.groupName} (${activeTitleTerms(patch).length}/${patch.titleTerms.length} title ${patch.titleTerms.length === 1 ? "term" : "terms"})`,
+      }));
+      head.appendChild(h("span", {
+        class: "zao-preview-group-state",
+        text: isKept ? "✓ keep" : "skip",
+      }));
+      block.appendChild(head);
+      block.appendChild(renderRulePatch(patch));
+      return block;
+    }
+
+    function renderRulePatch(patch) {
+      const wrap = h("div", { class: "zao-preview-rule-patches" });
+      for (const item of patch.titleTerms || []) {
+        const pill = h("button", { class: `zao-pill zao-title-pill zao-preview-title-chip${item.warning ? " zao-preview-title-chip-warning" : ""}${item.skipped ? " zao-preview-title-chip-skipped" : ""}` });
+        pill.type = "button";
+        pill.setAttribute("aria-pressed", item.skipped ? "false" : "true");
+        pill.addEventListener("click", (e) => {
+          e.stopPropagation();
+          item.skipped = !item.skipped;
+          render();
+        });
+        pill.addEventListener("keydown", (e) => {
+          e.stopPropagation();
+        });
+        if (item.warning) pill.title = item.warning;
+        pill.appendChild(h("span", { class: "zao-pill-kind", text: "T" }));
+        pill.appendChild(h("span", { text: item.term }));
+        wrap.appendChild(pill);
+      }
+      return wrap;
+    }
+
+    function activeTitleTerms(patch) {
+      return (patch.titleTerms || []).filter((item) => !item.skipped);
+    }
+
     function renderTabRow(tabInfo) {
       const li = h("li", { class: "zao-preview-tab" });
       li.appendChild(h("span", { class: "zao-preview-tab-host", text: tabInfo.hostname || "(no host)" }));
@@ -251,6 +331,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
       let n = 0;
       for (const g of currentPlan.newGroups) if (kept.has(newKey(g.name))) n++;
       for (const t of existingTargets) if (kept.has(existingKey(t.name))) n++;
+      for (const patch of currentPlan.rulePatches) if (kept.has(titleKey(patch.groupName))) n++;
       return n;
     }
 
@@ -321,6 +402,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
           kept.has(existingKey(a.groupName))
         );
         currentPlan.newGroups.push(...incomingGroups);
+        currentPlan.rulePatches = [];
         currentPlan.skipped = newSkipped;
         // Auto-keep the newly proposed groups.
         for (const g of incomingGroups) kept.add(newKey(g.name));
@@ -379,6 +461,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
           }
         }
         currentPlan.skipped = newSkipped;
+        currentPlan.rulePatches = [];
         console.log(`${LOG} preview modal: re-assigned ${pending.length} tab(s) to planned → ${placed} placed, ${newSkipped.length} skipped`);
       });
     }
@@ -416,6 +499,7 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
           placed++;
         }
         currentPlan.skipped = newSkipped;
+        currentPlan.rulePatches = [];
         console.log(`${LOG} preview modal: re-assigned ${pending.length} tab(s) to existing rules → ${placed} placed, ${newSkipped.length} skipped`);
       });
     }
@@ -434,9 +518,17 @@ export const showPreviewModal = ({ plan, onReassignToNew, onAssignToPlanned, onA
         droppedTabs.push(a.tabInfo);
         return false;
       });
+      const finalRulePatches = (currentPlan.rulePatches || [])
+        .filter((patch) => kept.has(titleKey(patch.groupName)))
+        .map((patch) => ({
+          ...patch,
+          titleTerms: activeTitleTerms(patch).map((item) => ({ ...item })),
+        }))
+        .filter((patch) => patch.titleTerms.length > 0);
       cleanup({
         assignedToExisting: finalExisting,
         newGroups: finalNewGroups,
+        rulePatches: finalRulePatches,
         skipped: [...currentPlan.skipped, ...droppedTabs],
       });
     }

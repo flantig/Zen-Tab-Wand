@@ -8,6 +8,7 @@ import { readRulesPref, writeRulesPref, getAIEngine } from "./rules.mjs";
 import {
   buildRulesEditor,
   buildSkipDomainsEditor,
+  buildCustomIconsEditor,
   buildBackupRestoreSection,
   teardownRulesPrefObserver,
   teardownSkipPrefObserver,
@@ -63,7 +64,7 @@ const SECTION_DESCRIPTIONS = [
   ],
   [
     "Backup & Restore",
-    "Export your rules and skip list as JSON for safekeeping, or import a previously-saved file to restore them.",
+    "Export your rules, skip list, and custom icons as JSON for safekeeping, or import a previously-saved file to restore them.",
   ],
   [
     "Look & Feel",
@@ -120,52 +121,385 @@ const findPrefRow = (dialog, prefName) => {
   return dialog.querySelector(`#${CSS.escape(id)}`);
 };
 
-// Subset of new-group-behavior values that are meaningful on the Local engine.
-// Mirrors the same 3-way pattern as the existing-behavior dropdown:
-//   - auto-add        → save the cluster as a rule (hostname-derived name)
-//   - transient       → apply the move, don't write a rule
-//   - fresh-categories → re-tidy ALL tabs into clusters, ignoring rules
-// The other Ollama values (prompt / identify-only) require LLM-style semantic
-// output (Zen edit modal expects a meaningful name; Plan Mode review is only
-// useful when the names mean something abstract) so they're hidden on Local.
-const LOCAL_NEW_GROUP_BEHAVIORS = new Set(["auto-add", "transient", "fresh-categories"]);
+const CHECKBOX_RIGHT_PREFS = [
+  CONFIG.MINIMAL_STYLE_PREF,
+  CONFIG.STRICT_RULES_PREF,
+  CONFIG.AI_OLLAMA_WARMUP_PREF,
+];
 
-// Hide individual dropdown options based on a whitelist of valid values.
-// Sine's settings page is HTML (not XUL), so it renders dropdowns as either
-// native <option> elements OR custom elements (e.g. <li> with data-value).
-// We try multiple selectors and report what we found so a missing-selector
-// case is debuggable.
-const filterDropdownOptions = (row, validValues) => {
-  if (!row) return;
-  // Try every selector we've ever seen Sine use. value-bearing children only.
-  const items = [
-    ...row.querySelectorAll("option"),
-    ...row.querySelectorAll("menuitem"),
-    ...row.querySelectorAll("[data-value]"),
-    ...row.querySelectorAll('[role="option"]'),
-  ];
-  if (items.length === 0) {
-    console.warn(
-      `${LOG} filterDropdownOptions: NO option-like children under row`,
-      row,
-      "innerHTML sample:",
-      (row.innerHTML || "").slice(0, 400)
-    );
-    return;
+const CONTROL_ROW_PREFS = [
+  CONFIG.MINIMAL_STYLE_PREF,
+  CONFIG.STRICT_RULES_PREF,
+  CONFIG.MATCH_MODE_PREF,
+  CONFIG.GRADIENT_STYLE_PREF,
+  CONFIG.AI_ENGINE_PREF,
+  CONFIG.AI_TITLE_LEARNING_PREF,
+  CONFIG.AI_EXISTING_BEHAVIOR_PREF,
+  CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF,
+  CONFIG.AI_OLLAMA_HOST_PREF,
+  CONFIG.AI_OLLAMA_MODEL_PREF,
+  CONFIG.AI_OLLAMA_WARMUP_PREF,
+  CONFIG.AI_LOCAL_BATCH_SIZE_PREF,
+];
+
+const DROPDOWN_PREFS = [
+  CONFIG.MATCH_MODE_PREF,
+  CONFIG.GRADIENT_STYLE_PREF,
+  CONFIG.AI_ENGINE_PREF,
+  CONFIG.AI_TITLE_LEARNING_PREF,
+  CONFIG.AI_EXISTING_BEHAVIOR_PREF,
+  CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF,
+];
+
+const DROPDOWN_CONFIGS = {
+  [CONFIG.MATCH_MODE_PREF]: {
+    defaultValue: "url-then-title",
+    options: [
+      ["url-only", "URL only"],
+      ["title-only", "Title only"],
+      ["url-then-title", "URL then Title"],
+      ["title-then-url", "Title then URL"],
+    ],
+  },
+  [CONFIG.GRADIENT_STYLE_PREF]: {
+    defaultValue: "left-right",
+    options: [
+      ["left-right", "Left to right"],
+      ["right-left", "Right to left"],
+      ["top-bottom", "Top to bottom"],
+      ["bottom-top", "Bottom to top"],
+      ["diagonal-down", "Diagonal down"],
+      ["diagonal-up", "Diagonal up"],
+      ["radial", "Radial"],
+    ],
+  },
+  [CONFIG.AI_ENGINE_PREF]: {
+    defaultValue: "off",
+    options: [
+      ["off", "None"],
+      ["local", "Local — Built-in model, limited capability"],
+      ["ollama", "Ollama — Stronger model, requires Ollama running locally"],
+    ],
+  },
+  [CONFIG.AI_TITLE_LEARNING_PREF]: {
+    defaultValue: "off",
+    options: [
+      ["off", "None"],
+      ["review-save-simple", "Review and Save (Simple)"],
+      ["review-save-complex", "Review and Save (Complex)"],
+    ],
+  },
+  [CONFIG.AI_EXISTING_BEHAVIOR_PREF]: {
+    defaultValue: "always-add",
+    options: [
+      ["always-add", "Move + Save Domain — Move the tab and add its domain to the matched rule"],
+      ["transient", "Move Once — Move the tab now; do not update saved rules"],
+    ],
+  },
+  [CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF]: {
+    defaultValue: "auto-add",
+    options: [
+      ["auto-add", "Preview + Save Rule — Review first; kept groups become saved rules"],
+      ["transient", "Group Once — Create groups now; do not save rules"],
+      ["prompt", "Zen Edit Prompt — Create groups, then open Zen's rename/color dialog"],
+      ["fresh-categories", "Fresh Rebuild — Ignore current rules and regroup all tabs from scratch"],
+      ["identify-only", "Preview Only — Review/re-assign first; apply groups without saving rules"],
+    ],
+  },
+};
+
+const normalizeMatchModeLabel = (row) => {
+  const label = row.querySelector(".sineItemPreferenceLabel") || row.firstElementChild;
+  if (!label) return;
+  label.textContent = label.textContent.replace(/^\s+/, "");
+  for (const attr of ["value", "label"]) {
+    if (label.hasAttribute?.(attr)) {
+      label.setAttribute(attr, label.getAttribute(attr).replace(/^\s+/, ""));
+    }
   }
-  for (const item of items) {
-    const v = item.getAttribute("value") || item.getAttribute("data-value");
-    if (v == null) continue;
-    const allow = validValues.has(v);
-    item.hidden = !allow;
-    item.style.display = allow ? "" : "none";
+};
+
+const alignSettingRows = (dialog) => {
+  for (const prefName of CONTROL_ROW_PREFS) {
+    const row = findPrefRow(dialog, prefName);
+    if (!row) continue;
+    row.classList.add("zao-control-row");
+    if (prefName === CONFIG.MATCH_MODE_PREF) {
+      row.classList.add("zao-match-mode-row");
+      normalizeMatchModeLabel(row);
+    }
+  }
+  for (const prefName of CHECKBOX_RIGHT_PREFS) {
+    const row = findPrefRow(dialog, prefName);
+    if (!row) continue;
+    row.classList.add("zao-checkbox-right");
+    const checkbox = row.querySelector('input[type="checkbox"], checkbox, [role="checkbox"]');
+    if (checkbox) {
+      checkbox.classList.add("zao-checkbox-control");
+      if (row.firstElementChild !== checkbox) {
+        row.insertBefore(checkbox, row.firstElementChild);
+      }
+    }
+  }
+};
+
+const setupAIEngineChangeFallback = (dialog) => {
+  const row = findPrefRow(dialog, CONFIG.AI_ENGINE_PREF);
+  if (!row || row._zaoAIEngineFallback) return;
+  row._zaoAIEngineFallback = true;
+  const refresh = () => {
+    setTimeout(() => updateConditionalFields(dialog), 0);
+    setTimeout(() => updateConditionalFields(dialog), 100);
+  };
+  row.addEventListener("change", refresh);
+  row.addEventListener("input", refresh);
+  row.addEventListener("command", refresh);
+  row.addEventListener("click", refresh);
+};
+
+const shortOptionLabel = (label) =>
+  String(label || "").split(/\s+(?:--|—)\s+/)[0].trim();
+
+const dropdownConfig = (prefName) => DROPDOWN_CONFIGS[prefName];
+
+const readStringPref = (prefName, fallback = "") => {
+  try { return Services.prefs.getStringPref(prefName, fallback); }
+  catch { return fallback; }
+};
+
+const writeStringPref = (prefName, value) => {
+  try { Services.prefs.setStringPref(prefName, value); }
+  catch (e) { console.warn(`${LOG} failed to set ${prefName}:`, e); }
+};
+
+const closeCustomDropdowns = (dialog, except = null) => {
+  for (const wrap of dialog.querySelectorAll(".zao-custom-dropdown.zao-open")) {
+    if (wrap === except) continue;
+    wrap.classList.remove("zao-open");
+    wrap.querySelector(".zao-custom-dropdown-button")?.setAttribute("aria-expanded", "false");
+  }
+};
+
+const selectedDropdownOption = (config, value) =>
+  config.options.find(([v]) => v === value) || config.options.find(([v]) => v === config.defaultValue) || config.options[0];
+
+const updateCustomDropdownMenuWidth = (wrap) => {
+  if (!wrap) return;
+  const labels = [...wrap.querySelectorAll(".zao-custom-dropdown-item:not(.zao-option-hidden)")]
+    .map((item) => item.dataset.fullLabel || item.textContent || "");
+  const longest = labels.reduce((n, label) => Math.max(n, label.length), 16);
+  wrap.style.setProperty("--zao-dropdown-menu-ch", String(Math.min(longest, 92)));
+};
+
+const syncCustomDropdown = (dialog, prefName) => {
+  const row = findPrefRow(dialog, prefName);
+  const wrap = row?.querySelector(".zao-custom-dropdown");
+  const config = dropdownConfig(prefName);
+  if (!row || !wrap || !config) return;
+
+  const value = readStringPref(prefName, config.defaultValue);
+  const selected = selectedDropdownOption(config, value);
+  const button = wrap.querySelector(".zao-custom-dropdown-button");
+  const label = selected?.[1] || "";
+  button.textContent = shortOptionLabel(label);
+  button.title = label;
+  button.dataset.value = selected?.[0] || "";
+  for (const item of wrap.querySelectorAll(".zao-custom-dropdown-item")) {
+    const isSelected = item.dataset.value === button.dataset.value;
+    item.classList.toggle("zao-selected", isSelected);
+    item.setAttribute("aria-selected", isSelected ? "true" : "false");
+  }
+  updateCustomDropdownMenuWidth(wrap);
+};
+
+const installCustomDropdown = (dialog, prefName) => {
+  const row = findPrefRow(dialog, prefName);
+  const config = dropdownConfig(prefName);
+  if (!row || !config || row._zaoCustomDropdown) return;
+  row._zaoCustomDropdown = true;
+
+  for (const control of row.querySelectorAll("select, menulist, button:not(.zao-custom-dropdown-button), [role='button']:not(.zao-custom-dropdown-button)")) {
+    control.classList.add("zao-native-dropdown-hidden");
+    control.setAttribute("aria-hidden", "true");
+    control.tabIndex = -1;
+  }
+
+  const wrap = h("div", { class: "zao-custom-dropdown" });
+  wrap.dataset.pref = prefName;
+  const button = h("button", { class: "zao-custom-dropdown-button" });
+  button.type = "button";
+  button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
+  const menu = h("div", { class: "zao-custom-dropdown-menu" });
+  menu.setAttribute("role", "listbox");
+
+  for (const [value, label] of config.options) {
+    const item = h("button", { class: "zao-custom-dropdown-item", text: label });
+    item.type = "button";
+    item.dataset.value = value;
+    item.dataset.fullLabel = label;
+    item.setAttribute("role", "option");
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      writeStringPref(prefName, value);
+      closeCustomDropdowns(dialog);
+      syncCustomDropdown(dialog, prefName);
+      updateConditionalFields(dialog);
+    });
+    menu.appendChild(item);
+  }
+
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const willOpen = !wrap.classList.contains("zao-open");
+    closeCustomDropdowns(dialog, wrap);
+    wrap.classList.toggle("zao-open", willOpen);
+    button.setAttribute("aria-expanded", willOpen ? "true" : "false");
+  });
+  button.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeCustomDropdowns(dialog);
+      button.focus();
+    }
+    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      wrap.classList.add("zao-open");
+      button.setAttribute("aria-expanded", "true");
+      wrap.querySelector(".zao-custom-dropdown-item:not(.zao-option-hidden)")?.focus();
+    }
+  });
+  menu.addEventListener("keydown", (e) => {
+    const items = [...menu.querySelectorAll(".zao-custom-dropdown-item:not(.zao-option-hidden)")];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === "Escape") {
+      closeCustomDropdowns(dialog);
+      button.focus();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      items[Math.min(i + 1, items.length - 1)]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      items[Math.max(i - 1, 0)]?.focus();
+    }
+  });
+
+  wrap.appendChild(button);
+  wrap.appendChild(menu);
+  row.appendChild(wrap);
+  syncCustomDropdown(dialog, prefName);
+};
+
+const installCustomDropdowns = (dialog) => {
+  if (!dialog._zaoCustomDropdownClose) {
+    dialog._zaoCustomDropdownClose = true;
+    document.addEventListener("click", (e) => {
+      if (!dialog.isConnected || dialog.contains(e.target)) return;
+      closeCustomDropdowns(dialog);
+    });
+    dialog.addEventListener("click", (e) => {
+      if (!e.target.closest?.(".zao-custom-dropdown")) closeCustomDropdowns(dialog);
+    });
+  }
+  for (const prefName of DROPDOWN_PREFS) installCustomDropdown(dialog, prefName);
+};
+
+const normalizeAIEngineValue = (value) => {
+  const v = String(value || "").toLocaleLowerCase();
+  if (v === "") return "";
+  if (v === "off") return "off";
+  if (v === "local") return "local";
+  if (v === "ollama") return "ollama";
+  const hasLocal = v.includes("local");
+  const hasOllama = v.includes("ollama");
+  if (hasLocal && !hasOllama) return "local";
+  if (hasOllama && !hasLocal) return "ollama";
+  if (v === "none") return "off";
+  return "";
+};
+
+const readSelectedAIEngineFromDialog = (dialog) => {
+  const row = findPrefRow(dialog, CONFIG.AI_ENGINE_PREF);
+  if (!row) return "";
+
+  const customValue = normalizeAIEngineValue(row.querySelector(".zao-custom-dropdown-button")?.dataset.value);
+  if (customValue) return customValue;
+
+  for (const control of row.querySelectorAll("select, menulist, button, input")) {
+    const value = normalizeAIEngineValue(control.value || control.getAttribute?.("value"));
+    if (value) return value;
+    const label = normalizeAIEngineValue(control.label || control.getAttribute?.("label"));
+    if (label) return label;
+    const text = normalizeAIEngineValue(control.textContent);
+    if (text) return text;
+  }
+
+  const selected = row.querySelector(
+    "option:checked, [selected], [aria-selected='true'], [data-selected='true']"
+  );
+  const selectedValue = normalizeAIEngineValue(
+    selected?.getAttribute?.("value") ||
+    selected?.getAttribute?.("data-value") ||
+    selected?.textContent
+  );
+  if (selectedValue) return selectedValue;
+
+  return "";
+};
+
+const AI_NEW_GROUP_OPTIONS = {
+  local: new Set(["auto-add", "transient", "fresh-categories"]),
+  ollama: new Set(["auto-add", "transient", "prompt", "fresh-categories", "identify-only"]),
+};
+
+const optionValue = (option) =>
+  option?.value || option?.getAttribute?.("value") || option?.getAttribute?.("data-value") || "";
+
+const setNewGroupOptionsForEngine = (dialog, engine) => {
+  const row = findPrefRow(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF);
+  if (!row) return;
+  const allowed = AI_NEW_GROUP_OPTIONS[engine];
+  if (!allowed) return;
+
+  try {
+    const stored = Services.prefs.getStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "auto-add");
+    if (!allowed.has(stored)) Services.prefs.setStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "auto-add");
+  } catch {}
+
+  for (const option of row.querySelectorAll("option, menuitem")) {
+    const value = optionValue(option);
+    const hidden = value && !allowed.has(value);
+    option.hidden = hidden;
+    option.disabled = hidden;
+    option.setAttribute("aria-hidden", hidden ? "true" : "false");
+  }
+
+  for (const control of row.querySelectorAll("select, menulist")) {
+    const value = optionValue(control);
+    if (value && !allowed.has(value)) {
+      control.value = "auto-add";
+      try { Services.prefs.setStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "auto-add"); } catch {}
+    }
+  }
+
+  const custom = row.querySelector(".zao-custom-dropdown");
+  if (custom) {
+    for (const item of custom.querySelectorAll(".zao-custom-dropdown-item")) {
+      const hidden = !allowed.has(item.dataset.value);
+      item.classList.toggle("zao-option-hidden", hidden);
+      item.disabled = hidden;
+      item.setAttribute("aria-hidden", hidden ? "true" : "false");
+    }
+    updateCustomDropdownMenuWidth(custom);
+    syncCustomDropdown(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF);
   }
 };
 
 const updateConditionalFields = (dialog) => {
-  // Always go through getAIEngine() so unknown / empty / "None" pref values
-  // normalize to "off" the same way as everywhere else in the codebase.
-  const engine = getAIEngine();
+  // Prefer the visible control because Sine may update the UI before the pref
+  // observer sees the committed value. Fall back to the stored pref on reopen.
+  const uiEngine = readSelectedAIEngineFromDialog(dialog);
+  const prefEngine = getAIEngine();
+  const engine = uiEngine || prefEngine;
   const isLocalOrOllama = engine === "local" || engine === "ollama";
 
   const setHidden = (row, hidden) => {
@@ -175,37 +509,31 @@ const updateConditionalFields = (dialog) => {
 
   // Ollama: shows BOTH the existing-behavior and new-group-behavior rows
   //   (they govern different parts of the unified classifier).
-  // Local: ONE row only — new-group-behavior with the 3-option filter applied.
+  // Local: ONE row only — new-group-behavior.
   //   Existing-behavior is hidden because Local unifies both decisions into
   //   the single dropdown (auto-add = grow rules; transient = don't; fresh =
   //   re-cluster ignoring rules entirely).
-  setHidden(findPrefRow(dialog, CONFIG.AI_EXISTING_BEHAVIOR_PREF), engine !== "ollama");
-  const newGroupBehaviorRow = findPrefRow(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF);
-  setHidden(newGroupBehaviorRow, !isLocalOrOllama);
-  if (engine === "local") {
-    filterDropdownOptions(newGroupBehaviorRow, LOCAL_NEW_GROUP_BEHAVIORS);
-    // If the user previously had an Ollama-only behavior selected (e.g.
-    // prompt / identify-only), force it back to a valid Local value so the
-    // dropdown doesn't display a now-hidden selection.
-    try {
-      const current = Services.prefs.getStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "");
-      if (current && !LOCAL_NEW_GROUP_BEHAVIORS.has(current)) {
-        console.log(`${LOG} new-group-behavior "${current}" not valid on Local — resetting to "transient"`);
-        Services.prefs.setStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "transient");
-      }
-    } catch (e) {
-      console.error(`${LOG} failed to reset new-group-behavior pref:`, e);
-    }
-  } else if (engine === "ollama") {
-    // Restore all options for Ollama (whitelist matches preferences.json).
-    filterDropdownOptions(newGroupBehaviorRow,
-      new Set(["auto-add", "transient", "prompt", "fresh-categories", "identify-only"])
-    );
-  }
-  setHidden(findPrefRow(dialog, CONFIG.AI_OLLAMA_HOST_PREF),        engine !== "ollama");
-  setHidden(findPrefRow(dialog, CONFIG.AI_OLLAMA_MODEL_PREF),       engine !== "ollama");
-  setHidden(findPrefRow(dialog, CONFIG.AI_OLLAMA_WARMUP_PREF),      engine !== "ollama");
-  setHidden(findPrefRow(dialog, CONFIG.AI_LOCAL_BATCH_SIZE_PREF),   !isLocalOrOllama);
+  const rows = {
+    engine: findPrefRow(dialog, CONFIG.AI_ENGINE_PREF),
+    titleLearning: findPrefRow(dialog, CONFIG.AI_TITLE_LEARNING_PREF),
+    existingBehavior: findPrefRow(dialog, CONFIG.AI_EXISTING_BEHAVIOR_PREF),
+    newGroupBehavior: findPrefRow(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF),
+    ollamaHost: findPrefRow(dialog, CONFIG.AI_OLLAMA_HOST_PREF),
+    ollamaModel: findPrefRow(dialog, CONFIG.AI_OLLAMA_MODEL_PREF),
+    ollamaWarmup: findPrefRow(dialog, CONFIG.AI_OLLAMA_WARMUP_PREF),
+    localBatchSize: findPrefRow(dialog, CONFIG.AI_LOCAL_BATCH_SIZE_PREF),
+  };
+
+  setHidden(rows.existingBehavior, engine !== "ollama");
+  setHidden(rows.titleLearning, engine !== "ollama");
+  setHidden(rows.newGroupBehavior, !isLocalOrOllama);
+  setHidden(rows.ollamaHost,        engine !== "ollama");
+  setHidden(rows.ollamaModel,       engine !== "ollama");
+  setHidden(rows.ollamaWarmup,      engine !== "ollama");
+  setHidden(rows.localBatchSize,    !isLocalOrOllama);
+  setNewGroupOptionsForEngine(dialog, engine);
+  for (const prefName of DROPDOWN_PREFS) syncCustomDropdown(dialog, prefName);
+  alignSettingRows(dialog);
 };
 
 // First-time AI engine warning modals.
@@ -228,16 +556,12 @@ const COUNTDOWN_SECONDS = 3;
 const showAckModal = ({ ackPref, contentNodes, logTag }) => {
   let alreadyAck = false;
   try { alreadyAck = Services.prefs.getBoolPref(ackPref, false); } catch {}
-  console.debug(`${LOG} [${logTag}] maybeShow called — acknowledged=${alreadyAck}`);
   if (alreadyAck) {
-    console.debug(`${LOG} [${logTag}] skipping — already acknowledged. To re-show, unset ${ackPref} in about:config.`);
     return;
   }
   if (document.querySelector(".zao-warning-dialog[open]")) {
-    console.debug(`${LOG} [${logTag}] skipping — another warning modal already open`);
     return;
   }
-  console.debug(`${LOG} [${logTag}] building modal`);
 
   const modal = h("dialog", { class: "zao-warning-dialog" });
   for (const n of contentNodes) modal.appendChild(n);
@@ -279,7 +603,6 @@ const showAckModal = ({ ackPref, contentNodes, logTag }) => {
   document.documentElement.appendChild(modal);
   try {
     modal.showModal();
-    console.debug(`${LOG} [${logTag}] modal shown`);
   } catch (e) {
     console.warn(`${LOG} [${logTag}] showModal() failed — falling back to confirm():`, e);
     modal.remove();
@@ -340,7 +663,7 @@ const maybeShowLocalWarning = () => {
 
   const li2 = h("li");
   li2.appendChild(h("strong", { text: "Limited: " }));
-  li2.appendChild(document.createTextNode("only assigns tabs to existing groups. Won't invent new categories."));
+  li2.appendChild(document.createTextNode("creates simpler hostname/intent-based groups than Ollama."));
 
   const li3 = h("li");
   li3.appendChild(h("strong", { text: "Want stronger results? " }));
@@ -373,7 +696,6 @@ const setupEnginePrefObserver = () => {
       if (topic !== "nsPref:changed") return;
       if (data !== CONFIG.AI_ENGINE_PREF) return;
       const engine = getAIEngine();
-      console.log(`${LOG} [ollama-warning] engine pref changed → "${engine}"`);
       for (const d of document.querySelectorAll(".sineItemPreferenceDialog")) {
         if (isOurDialog(d)) {
           updateConditionalFields(d);
@@ -432,6 +754,7 @@ const performInject = (dialog) => {
 
   const rulesEditor = buildRulesEditor(initial);
   const skipEditor = buildSkipDomainsEditor();
+  const customIconsEditor = buildCustomIconsEditor();
   const backupSection = buildBackupRestoreSection();
 
   // Each section's content lives as a sibling immediately after its Sine
@@ -441,12 +764,15 @@ const performInject = (dialog) => {
   // when not found).
   insertAfter(content, rulesEditor, findSeparatorContainer(dialog, "Group Rules"));
   insertAfter(content, skipEditor, findSeparatorContainer(dialog, "Skip Domains"));
+  insertAfter(content, customIconsEditor, findSeparatorContainer(dialog, "Look & Feel"));
   insertAfter(content, backupSection, findSeparatorContainer(dialog, "Backup & Restore"));
 
   tagSeparatorContainers(dialog);
   injectSectionDescriptions(dialog);
+  installCustomDropdowns(dialog);
   setupEnginePrefObserver();
   updateConditionalFields(dialog);
+  setupAIEngineChangeFallback(dialog);
   console.log(`${LOG} injected rules + skip + backup sections into Sine settings dialog`);
 };
 

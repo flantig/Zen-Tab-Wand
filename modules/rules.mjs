@@ -2,7 +2,15 @@
 // Reads/writes the rules JSON pref, validates rules.json file contents, and exposes
 // the precedence chain (pref > file > built-in defaults).
 
-import { CONFIG, DEFAULT_RULES, LOG, ZEN_COLOR_NAMES, isValidHex } from "./config.mjs";
+import {
+  CONFIG,
+  DEFAULT_GRADIENT_STYLE,
+  DEFAULT_RULES,
+  GRADIENT_STYLES,
+  LOG,
+  ZEN_COLOR_NAMES,
+  isValidHex,
+} from "./config.mjs";
 
 const cleanStringList = (value) =>
   Array.isArray(value)
@@ -27,7 +35,7 @@ const cleanRule = (r) => {
   if (color2) out.color2 = color2;
   if (typeof r?.icon === "string") {
     const icon = r.icon.trim();
-    if (icon) out.icon = icon.slice(0, 12);
+    if (icon) out.icon = icon.startsWith("custom:") ? icon.slice(0, 128) : icon.slice(0, 12);
   }
   return out;
 };
@@ -35,26 +43,19 @@ const cleanRule = (r) => {
 const isRunnableRule = (r) =>
   r.name.length > 0 && (r.domains.length > 0 || r.titleTerms.length > 0);
 
-/**
- * Read the rules pref written by the settings widget.
- *
- * Three return states callers should know about:
- *   - `null`     — pref is unset, blank, or unparseable JSON
- *   - `[]`       — pref exists but every entry was malformed (and got dropped)
- *   - `Rule[]`   — one or more valid rules
- *
- * Each Rule has shape:
- * `{ name: string, domains: string[], titleTerms?: string[], color?: string, color2?: string, icon?: string }`.
- * Color is preserved if it's either a Zen palette name (e.g. "blue") or a hex (`#abc`).
- *
- * Malformed entries are silently dropped — invalid rules don't break valid ones.
- */
+// One sanitizer for every rule ingestion path. Keeping import, prefs, and
+// rules.json on this path prevents compatibility fixes from drifting apart.
+export const sanitizeRules = (rules, { keepIncomplete = false } = {}) => {
+  const cleaned = Array.isArray(rules) ? rules.map(cleanRule) : [];
+  return keepIncomplete ? cleaned : cleaned.filter(isRunnableRule);
+};
+
 /**
  * Read the rules pref.
  *
  * @param {Object} [opts]
  * @param {boolean} [opts.keepIncomplete=false]
- *   When true, in-progress rules (empty name or empty domains) are returned
+ *   When true, in-progress rules (empty name or no match terms) are returned
  *   alongside complete ones. The settings widget passes this so a user can
  *   add a blank row, close the browser, and find it still waiting to be
  *   filled in next session. The wand-click pipeline (`loadRules`) uses the
@@ -67,13 +68,7 @@ export const readRulesPref = ({ keepIncomplete = false } = {}) => {
     if (!raw.trim()) return null;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
-    const cleaned = parsed
-      .map((r) => {
-        return cleanRule(r);
-      });
-    return keepIncomplete
-      ? cleaned
-      : cleaned.filter(isRunnableRule);
+    return sanitizeRules(parsed, { keepIncomplete });
   } catch (e) {
     console.warn(`${LOG} rules pref parse failed:`, e);
     return null;
@@ -158,7 +153,7 @@ export const validateRules = (data) => {
       throw new Error(`rule[${i}] '${rule.name}': needs 'domains' or 'titleTerms'`);
     }
   }
-  return data.rules.map(cleanRule).filter(isRunnableRule);
+  return sanitizeRules(data.rules);
 };
 
 const loadRulesFromFile = async () => {
@@ -223,12 +218,31 @@ export const getMatchMode = () => {
   return "url-then-title";
 };
 
+export const getGradientStyle = () => {
+  try {
+    const style = Services.prefs.getStringPref(CONFIG.GRADIENT_STYLE_PREF, DEFAULT_GRADIENT_STYLE);
+    if (Object.prototype.hasOwnProperty.call(GRADIENT_STYLES, style)) return style;
+  } catch {}
+  return DEFAULT_GRADIENT_STYLE;
+};
+
 // Which AI engine is selected. Returns one of: "off" | "local" | "ollama".
 // Any unrecognized value (Sine's "None" is the empty string) maps to "off".
 export const getAIEngine = () => {
   try {
     const engine = Services.prefs.getStringPref(CONFIG.AI_ENGINE_PREF, "");
     if (engine === "local" || engine === "ollama") return engine;
+    return "off";
+  } catch {
+    return "off";
+  }
+};
+
+export const getAITitleLearning = () => {
+  try {
+    const value = Services.prefs.getStringPref(CONFIG.AI_TITLE_LEARNING_PREF, "off");
+    if (value === "review-save" || value === "review-save-simple") return "review-save-simple";
+    if (value === "review-save-complex") return "review-save-complex";
     return "off";
   } catch {
     return "off";
@@ -292,8 +306,8 @@ export const getLocalAIBatchSize = () => {
 //
 // On the Local engine the existing-behavior row is hidden in settings — the
 // new-group-behavior dropdown drives BOTH decisions instead. Map:
-//   Auto-add  → always-add  (grow the rule)
-//   Transient → transient   (don't grow)
+//   Preview + Save Rule → always-add  (grow the rule)
+//   Group Once → transient   (don't grow)
 //   Fresh     → transient   (Fresh ignores rules; the answer doesn't matter)
 export const getAIExistingBehavior = () => {
   try {
@@ -307,7 +321,7 @@ export const getAIExistingBehavior = () => {
 };
 
 // What to do when AI clusters a set of unmatched tabs into a new group.
-//   "auto-add"  — create the tab-group AND a matching rule (default)
+//   "auto-add"  — Preview + Save Rule: create the tab-group AND a matching rule (default)
 //   "transient" — create the tab-group but don't add a rule
 //   "prompt"    — create the tab-group and open Zen's edit modal so user can confirm
 export const getAINewGroupBehavior = () => {

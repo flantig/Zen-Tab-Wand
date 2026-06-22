@@ -168,3 +168,35 @@ Output ONLY a JSON object mapping each original category name (left side) to its
   "Office Supplies": "Shopping"
 }`;
 };
+
+export const buildTitleTermPrompt = (rules, candidates, mode = "simple") => {
+  const candidateLines = candidates.map((c, i) => {
+    const titles = (c.titles || []).slice(0, 3).map((t) => `"${String(t).replace(/\s+/g, " ").slice(0, TITLE_LIMIT)}"`).join("; ");
+    const snippets = mode === "complex" && c.snippets?.length
+      ? `\n   Page context: ${c.snippets.slice(0, 2).map((s) => `"${String(s).replace(/\s+/g, " ").slice(0, 180)}"`).join("; ")}`
+      : "";
+    return `${i}. ${c.term} — seen in titles: ${titles}${snippets}`;
+  }).join("\n");
+
+  return `Assign each candidate title chip below to a browser rule category.
+
+Important:
+- Categorize the chip by what it means in the page titles and context.
+- Do not categorize solely by the hostname or provider where the title appeared.
+- Prefer distinctive nouns, names, acronyms, products, projects, fandoms, topics, or technologies over generic page/action words.
+- Use an existing label when it fits. Otherwise invent a short Title Case label.
+- Use "none" when the keyword is too generic or you cannot infer a useful topic.
+
+Existing labels:
+${renderCategoryList(rules)}
+
+Candidate chips:
+${candidateLines}
+
+Output ONLY a JSON object mapping each exact chip text to its chosen label or "none".
+Example:
+{
+  "Commander": "Card Games",
+  "calendar": "Productivity"
+}`;
+};

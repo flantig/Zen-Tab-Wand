@@ -40,7 +40,8 @@ The same `auto-organize.uc.mjs` is loaded into two different documents by Sine:
             ├── injectStylesheet()         ──▶ prefs-ui.mjs (internal)
             └── performInject()            ──▶ prefs-ui.mjs (internal)
                   ├── buildRulesEditor()        ──▶ widget.mjs
-                  │     └── openColorPopover()       ──▶ color-picker.mjs
+                  │     ├── openColorPopover()       ──▶ color-picker.mjs
+                  │     └── openEmojiPopover()       ──▶ emoji-picker.mjs
                   ├── buildBackupRestoreSection() ──▶ widget.mjs
                   ├── tagSeparatorContainers()
                   ├── injectSectionDescriptions()
@@ -70,7 +71,7 @@ rules.mjs   tabs.mjs   ui-toast.mjs
             │  │       └────── ollama.mjs ─────┘
             │  │                  ▲
             │  │                  │
-            │  │           preview-modal.mjs   (Plan Mode UI)
+            │  │           preview-modal.mjs   (preview UI)
             │  │                  ▲
             │  └──────────────────┤
             │                     │
@@ -87,7 +88,7 @@ browser-ui.mjs    browser-hooks.mjs   (browser context)
                  │
    ┌─────────────┴──────────┐
    │                        │
-prefs-ui.mjs ─── widget.mjs ─── color-picker.mjs   (prefs context)
+prefs-ui.mjs ─── widget.mjs ─── color-picker.mjs / emoji-picker.mjs   (prefs context)
 ```
 
 ## The tidy-button click flow
@@ -108,10 +109,10 @@ Then, if the AI engine is set to anything other than `"off"`:
 
 10. **setButtonThinking(true)** — start the wand's pulse animation while AI runs
 11. **runPass2** (ai.mjs **or** ollama.mjs) — depends on `ai-engine` pref:
-    - `"local"` → existing-group classification only, max-cosine over per-tab embeddings
+    - `"local"` → existing-group classification, or Fresh Rebuild clustering when selected
     - `"ollama"` → unified classify-and-cluster; can also invent new groups
-12. **Plan Mode gate** — if `ai-new-group-behavior` is `"identify-only"` OR (`"auto-add"` / `"always-add"` with new groups to confirm), `showPreviewModal` (preview-modal.mjs) opens with the plan; the user toggles which groups to keep and can re-assign-to-existing / re-assign-to-new in place. Apply is gated on the user's confirmation
-13. **applyPass2** — execute the (possibly user-edited) plan: move tabs into existing groups, create new ones, optionally grow the rules array
+12. **Preview gate** — Preview Only always opens `showPreviewModal`; Ollama rule-mutating flows also open it before writing rules. With AI title learning enabled, reviewed `T` chips are proposed from actual tab titles as separate title-rule proposals before the modal opens, including an audit of tabs already inside rule-named groups
+13. **applyPass2** — execute the (possibly user-edited) plan: move tabs into existing groups, create new ones, optionally grow rule domains and apply kept title-rule proposals
 14. **fresh-categories cleanup** — if mode is `"fresh-categories"`, dissolve any group that has zero tabs after the rebuild
 
 Finally for every click:
@@ -130,6 +131,8 @@ All prefs use the `extensions.zen-auto-organize.*` prefix (legacy; preserved acr
 - **Skip domains** live in `extensions.zen-auto-organize.skip-domains-json` (a JSON-encoded array of hostname patterns). Read by click-handler step 6 to park matching tabs at the top of the workspace.
 - **Strict rule enforcement** lives in `extensions.zen-auto-organize.strict-rules` (boolean, default false). When true, click-handler step 9 ejects any tab that does not match its current group under the active URL/title match mode.
 - **Rule matching priority** lives in `extensions.zen-auto-organize.match-mode` (`"url-only" | "title-only" | "url-then-title" | "title-then-url"`, default `"url-then-title"`).
+- **Gradient style** lives in `extensions.zen-auto-organize.gradient-style` (`"left-right"` by default) and controls how two-color rule gradients are drawn.
 - **Minimal style** lives in `extensions.zen-auto-organize.minimal-style`. Observed by `setupMinimalStylePrefObserver` (browser-hooks.mjs) so the style flips live across all workspaces.
 - **AI engine + behaviors** live in `extensions.zen-auto-organize.ai-engine` (`"" | "local" | "ollama"`), `.ai-existing-behavior`, `.ai-new-group-behavior`, `.ai-ollama-host`, `.ai-ollama-model`, `.ai-ollama-warmup`.
-- **Rule colors** are stored inline on each rule (`{ name, domains, titleTerms, color }`). The color is either a Zen palette name (`"blue"`) or a hex string (`"#abc"`).
+- **Rule appearance** is stored inline on each rule (`{ name, domains, titleTerms, color, color2, icon }`). `color`/`color2` are Zen palette names or hex strings; `icon` is plain text.
+- **Custom icons** live in `extensions.zen-auto-organize.custom-icons-json` as local image data URLs. Rules reference them by `custom:<id>`.

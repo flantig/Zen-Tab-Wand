@@ -1,8 +1,17 @@
-/* Zen Tab Wand — pill-style rules table in the Sine settings dialog.
-   Borders/backgrounds are derived from currentColor via color-mix so the
-   widget adapts to whatever theme Zen is running. */
+/* Zen Tab Wand — chrome + settings styles.
 
-/* --- Tab-group collapse fix.
+   Section map:
+   1. Browser tab groups        — collapse fix, minimal mode, gradients, icons
+   2. Toolbar button            — wand wiggle + thinking pulse
+   3. Settings base layout      — descriptions, aligned rows, custom dropdowns
+   4. Rules editor              — rule table, drag handles, chips, skip domains
+   5. Action settings           — backup/restore and custom icon controls
+   6. Color and icon pickers    — swatches, emoji picker, custom icon manager
+   7. Preview and warning modals — AI preview, warnings, spinners */
+
+/* ─── 1. Browser Tab Groups ──────────────────────────────────────────────── */
+
+/* Tab-group collapse fix.
    Firefox's MozTabbrowserTabGroup sets `aria-hidden="true"` on non-selected
    tabs when the group is collapsed, but leaves the visual hiding to CSS.
    Firefox's standard horizontal tab strip ships that CSS; Zen's vertical
@@ -17,7 +26,7 @@ tab-group[collapsed] tab[aria-hidden="true"] {
   display: none !important;
 }
 
-/* --- Look & Feel: minimal mode for rule-matched tab-groups.
+/* Look & Feel: minimal mode for rule-matched tab-groups.
    Overrides Zen's per-group color custom properties with values derived from
    the toolbar / urlbar so groups blend into the chrome instead of standing out. */
 tab-group.zao-minimal {
@@ -27,7 +36,40 @@ tab-group.zao-minimal {
   --tab-group-line-color: color-mix(in srgb, currentColor 18%, transparent) !important;
 }
 
-/* --- Toolbar button: wiggle the wand on click --- */
+tab-group.zao-has-gradient .tab-group-label {
+  background: var(--zao-tab-group-gradient, var(--tab-group-color)) !important;
+}
+
+tab-group.zao-has-icon .tab-group-label {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+tab-group.zao-has-icon .tab-group-label::before {
+  content: var(--zao-tab-group-icon);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 1.15em;
+  width: 1.15em;
+  height: 1.15em;
+  margin-inline-end: 0.35em;
+  font-size: 1.15em;
+  line-height: 1;
+  transform: none;
+}
+
+tab-group.zao-has-custom-icon .tab-group-label::before {
+  content: "";
+  background-image: var(--zao-tab-group-icon-url);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+/* ─── 2. Toolbar Button ──────────────────────────────────────────────────── */
+
+/* Wiggle the wand on click. */
 @keyframes zao-wand-wiggle {
   0%   { transform: rotate(0deg); }
   15%  { transform: rotate(-18deg); }
@@ -57,6 +99,8 @@ tab-group.zao-minimal {
   transform-origin: center;
 }
 
+/* ─── 3. Settings Base Layout ────────────────────────────────────────────── */
+
 /* Inline description paragraph injected under a Sine "separator" header.
    Sine renders separator labels as bold/larger section titles, so verbose
    paragraph text in the label itself breaks the styling. We inject this as a
@@ -73,6 +117,170 @@ tab-group.zao-minimal {
 .zao-pref-hidden {
   display: none !important;
 }
+
+.zao-our-dialog .sineItemPreferenceDialogContent {
+  overflow-x: hidden !important;
+}
+
+.zao-control-row,
+.zao-action-pref {
+  --zao-pref-label-column: minmax(340px, 620px);
+}
+
+.zao-control-row {
+  display: grid !important;
+  grid-template-columns: var(--zao-pref-label-column) auto !important;
+  justify-content: start !important;
+  column-gap: 16px !important;
+  align-items: center !important;
+  padding: 6px 2px !important;
+}
+
+.zao-control-row > :last-child {
+  justify-self: start !important;
+}
+
+.zao-control-row > menulist {
+  margin-inline-start: -4px !important;
+}
+
+.zao-native-dropdown-hidden {
+  display: none !important;
+}
+
+.zao-custom-dropdown {
+  position: relative;
+  justify-self: start;
+}
+
+.zao-custom-dropdown-button {
+  min-height: 38px;
+  max-width: min(620px, 58vw);
+  padding: 0 34px 0 16px;
+  border: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, CanvasText 13%, transparent);
+  color: CanvasText;
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+}
+
+.zao-custom-dropdown-button:hover,
+.zao-custom-dropdown.zao-open > .zao-custom-dropdown-button {
+  background: color-mix(in srgb, CanvasText 18%, transparent);
+  border-color: color-mix(in srgb, CanvasText 18%, transparent);
+}
+
+.zao-custom-dropdown-button::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: translateY(-65%) rotate(45deg);
+  opacity: 0.85;
+}
+
+.zao-custom-dropdown-menu {
+  display: none;
+  position: absolute;
+  z-index: 10000;
+  inset-inline-end: 0;
+  top: calc(100% + 4px);
+  box-sizing: border-box;
+  min-width: 100%;
+  width: min(calc((var(--zao-dropdown-menu-ch, 32) * 1ch) + 72px), calc(100vw - 48px));
+  max-width: min(760px, calc(100vw - 48px));
+  max-height: min(360px, 55vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 8px;
+  background: Canvas;
+  box-shadow: 0 12px 30px color-mix(in srgb, #000 35%, transparent);
+}
+
+.zao-custom-dropdown.zao-open > .zao-custom-dropdown-menu {
+  display: grid;
+  gap: 2px;
+}
+
+.zao-custom-dropdown-item {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: CanvasText;
+  font: inherit;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.zao-custom-dropdown-item:hover,
+.zao-custom-dropdown-item:focus-visible,
+.zao-custom-dropdown-item.zao-selected {
+  background: color-mix(in srgb, CanvasText 14%, transparent);
+}
+
+.zao-custom-dropdown-item.zao-option-hidden {
+  display: none;
+}
+
+.zao-control-row > input {
+  margin-inline-start: 0 !important;
+}
+
+.zao-control-row > .sineItemPreferenceLabel {
+  margin-inline-start: 0 !important;
+  padding-inline-start: 0 !important;
+  text-indent: 0 !important;
+}
+
+.zao-checkbox-right {
+  display: grid !important;
+  grid-template-columns: var(--zao-pref-label-column) auto !important;
+  justify-content: start !important;
+  column-gap: 16px !important;
+  align-items: center !important;
+  padding: 6px 2px !important;
+}
+
+.zao-checkbox-right > .sineItemPreferenceLabel {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  margin-inline-start: 0 !important;
+  padding-inline-start: 0 !important;
+  text-indent: 0 !important;
+}
+
+.zao-checkbox-right input[type="checkbox"],
+.zao-checkbox-right checkbox,
+.zao-checkbox-right [role="checkbox"],
+.zao-checkbox-control {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  justify-self: start !important;
+  margin-inline-start: 0 !important;
+  transform: translateX(5px) !important;
+}
+
+.zao-pref-hidden,
+.zao-pref-hidden.zao-control-row,
+.zao-pref-hidden.zao-checkbox-right {
+  display: none !important;
+}
+
+/* ─── 4. Rules Editor ────────────────────────────────────────────────────── */
 
 .zao-rules-editor {
   display: block !important;
@@ -93,14 +301,14 @@ tab-group.zao-minimal {
 .zao-row,
 .zao-add-row {
   display: grid;
-  /* grip | color | category | domains | remove */
-  grid-template-columns: 20px 28px 180px 1fr 28px;
+  /* grip | color/icon | category | domains | remove */
+  grid-template-columns: 20px 52px 180px 1fr 28px;
   gap: 10px;
   padding: 8px 12px;
   align-items: center;
 }
 
-/* --- Drag-handle grip for reordering rules.
+/* Drag-handle grip for reordering rules.
    Only this element is `draggable`; the rest of the row stays clickable for
    editing inputs / pills without triggering a drag. */
 .zao-row-grip {
@@ -164,18 +372,49 @@ tab-group.zao-minimal {
   padding-right: 6px !important;
 }
 
-/* Backup & Restore — just the button row beneath the Sine separator.
-   Header + description come from Sine's native separator + injected
-   .zao-pref-description, no XUL markup created here. */
+/* ─── 5. Action Settings ─────────────────────────────────────────────────── */
+
+/* Action prefs — custom rows that mirror Sine's label/description + control
+   layout while keeping our own buttons. */
 .zao-backup-section {
-  margin: 8px 0 !important;
-  padding: 0 12px !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
-.zao-backup-row {
+.zao-action-pref {
+  display: grid !important;
+  grid-template-columns: var(--zao-pref-label-column) auto !important;
+  justify-content: start !important;
+  column-gap: 16px !important;
+  row-gap: 8px !important;
+  align-items: center !important;
+  padding: 6px 2px !important;
+}
+
+.zao-backup-actions-row {
   display: flex !important;
+  grid-template-columns: none !important;
+  justify-content: flex-start !important;
+  padding: 6px 2px 18px 2px !important;
+}
+
+.zao-action-pref-title {
+  font-size: inherit !important;
+  line-height: 1.35 !important;
+}
+
+.zao-action-pref-description {
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  opacity: 0.7 !important;
+  margin-top: 2px !important;
+}
+
+.zao-action-pref-actions {
+  display: flex !important;
+  justify-content: flex-start !important;
   gap: 8px !important;
-  padding: 0 2px !important;
+  flex-wrap: wrap !important;
 }
 
 .zao-backup-btn {
@@ -191,6 +430,16 @@ tab-group.zao-minimal {
 
 .zao-backup-btn:hover {
   background: color-mix(in srgb, currentColor 16%, transparent) !important;
+}
+
+@media (max-width: 520px) {
+  .zao-control-row,
+  .zao-action-pref {
+    grid-template-columns: 1fr !important;
+  }
+  .zao-action-pref-actions {
+    justify-content: flex-start !important;
+  }
 }
 
 .zao-header {
@@ -392,11 +641,14 @@ tab-group.zao-minimal {
   font-size: 12px;
 }
 
-/* --- Color picker --- */
+/* ─── 6. Color And Icon Pickers ──────────────────────────────────────────── */
+
+/* Color picker. */
 .zao-color-cell {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   position: relative;
 }
 
@@ -436,6 +688,12 @@ tab-group.zao-minimal {
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   border-radius: 8px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.zao-color-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .zao-presets {
@@ -483,7 +741,255 @@ tab-group.zao-minimal {
   border-color: color-mix(in srgb, currentColor 50%, transparent);
 }
 
-/* ─── Identify-only preview modal (Phase 4d) ──────────────────────────────── */
+.zao-icon-button {
+  appearance: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+.zao-icon-button .zao-emoji-img {
+  width: 16px;
+  height: 16px;
+}
+.zao-icon-empty {
+  opacity: 0.55;
+  font-size: 12px;
+}
+
+.zao-emoji-popover {
+  position: fixed;
+  z-index: 999999;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 224px;
+  padding: 8px;
+  background: Canvas;
+  color: CanvasText;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+.zao-emoji-search-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 5px;
+  align-items: center;
+}
+.zao-emoji-current {
+  appearance: none;
+  position: relative;
+  box-sizing: border-box;
+  width: 40px;
+  height: 34px;
+  min-width: 40px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.zao-emoji-current::after {
+  content: "×";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: color-mix(in srgb, Canvas 72%, transparent);
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0;
+}
+.zao-emoji-current:hover::after,
+.zao-emoji-current:focus::after {
+  opacity: 1;
+}
+.zao-emoji-current-empty {
+  cursor: default;
+  border-color: color-mix(in srgb, currentColor 22%, transparent);
+  border-style: dashed;
+  background: transparent;
+}
+.zao-emoji-current-empty::after {
+  content: "";
+}
+.zao-emoji-search {
+  appearance: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 5px;
+  color: inherit;
+  font-size: 12px;
+  padding: 5px 7px;
+  outline: none;
+}
+.zao-emoji-search:focus {
+  border-color: color-mix(in srgb, currentColor 50%, transparent);
+}
+.zao-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 40px);
+  justify-content: center;
+  gap: 5px;
+  direction: ltr;
+  overflow: hidden;
+}
+.zao-emoji-choice {
+  appearance: none;
+  box-sizing: border-box;
+  position: relative;
+  display: block;
+  width: 40px;
+  height: 34px;
+  min-width: 40px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  text-align: center;
+  text-indent: 0;
+  white-space: nowrap;
+}
+.zao-emoji-glyph {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  font-size: 18px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  unicode-bidi: isolate;
+}
+.zao-emoji-img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+}
+.zao-emoji-choice:hover,
+.zao-emoji-choice:focus {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  border-color: color-mix(in srgb, currentColor 20%, transparent);
+  outline: none;
+}
+.zao-emoji-pager {
+  display: grid;
+  grid-template-columns: 54px 1fr 54px;
+  align-items: center;
+  gap: 6px;
+}
+.zao-emoji-page {
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.75;
+}
+.zao-emoji-action {
+  appearance: none;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  min-width: 0;
+  padding: 4px 8px;
+}
+.zao-emoji-action:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.zao-custom-icons-editor {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.zao-custom-icons-popover {
+  position: fixed;
+  z-index: 999999;
+  box-sizing: border-box;
+  width: 224px;
+  padding: 8px;
+  background: Canvas;
+  color: CanvasText;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+.zao-custom-icons-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 40px);
+  justify-content: center;
+  gap: 5px;
+  align-items: center;
+}
+.zao-custom-icon-choice {
+  appearance: none;
+  position: relative;
+  box-sizing: border-box;
+  width: 40px;
+  height: 34px;
+  min-width: 40px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.zao-custom-icon-choice::after {
+  content: "×";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: color-mix(in srgb, Canvas 72%, transparent);
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0;
+}
+.zao-custom-icon-choice:hover::after,
+.zao-custom-icon-choice:focus::after {
+  opacity: 1;
+}
+.zao-custom-icons-empty {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* ─── 7. Preview And Warning Modals ──────────────────────────────────────── */
+
+/* Identify-only preview modal (Phase 4d). */
 /* A native <dialog> we inject into chrome://browser/content/browser.xhtml when
    the user picks "Identify only" as the new-group behavior. Renders the AI
    plan with Apply / Cancel; the click-handler only commits on Apply.        */
@@ -699,6 +1205,27 @@ dialog.zao-warning-dialog::backdrop {
 .zao-preview-group.zao-kept .zao-preview-group-state {
   color: AccentColor;
   opacity: 1;
+}
+
+.zao-preview-rule-patches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 7px;
+}
+.zao-preview-title-chip {
+  appearance: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.zao-preview-title-chip-skipped {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.zao-preview-title-chip-warning {
+  border-color: color-mix(in srgb, #ffbc4a 65%, transparent);
+  background: color-mix(in srgb, #ffbc4a 18%, transparent);
 }
 
 .zao-preview-tab-list {

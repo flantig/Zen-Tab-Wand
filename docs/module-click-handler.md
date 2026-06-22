@@ -30,13 +30,16 @@ The function the toolbar button invokes. Sequences all the passes.
 11. getAIEngine() === "off" ? skip Pass 2 : continue
 12. setButtonThinking(true)           — start wand pulse animation
 13. runPass2()                        — branches on engine:
-       "local"  → ai.mjs runPass2()       (existing groups only)
+       "local"  → ai.mjs runPass2()       (existing groups or simple new groups)
        "ollama" → ollama.mjs runPass2Ollama() OR runPass2OllamaFresh()
                   depending on ai-new-group-behavior
-14. Plan Mode gate (if applicable):
-       getAINewGroupBehavior() in ("identify-only", "auto-add",
-       "always-add" with new groups) → showPreviewModal(plan)
-       Modal returns the user-edited plan. Apply waits for confirmation.
+14. Preview gate (if applicable):
+       Preview Only always opens showPreviewModal(plan). Ollama rule-mutating
+       flows (Move + Save Domain existing rules and/or Preview + Save Rule new rules) also open it
+       so the user can approve rule changes first. If AI title learning is
+       enabled, reviewed T chips are attached here before the modal opens; this
+       can also open an audit-only modal for tabs already sitting in rule-named
+       groups. Modal returns the user-edited plan. Apply waits for confirmation.
 15. applyPass2(plan, ws, rules)       — execute moves; create new groups;
                                         optionally grow rules array
 16. (fresh-categories mode) dissolve any group with zero tabs after rebuild

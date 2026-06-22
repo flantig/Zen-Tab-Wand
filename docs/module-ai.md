@@ -27,7 +27,7 @@ Ships with Zen/Firefox. First load takes 1–3s (model warm-up). Subsequent call
 | Name | Notes |
 |---|---|
 | `runPass2(unmatched, rules, workspaceId)` | Pure planning — returns assignment plan without mutating DOM. `newGroups` is always `[]` in the local-AI path. |
-| `applyPass2(plan, workspaceId, rules)` | Executes the plan: moves tabs into existing groups, optionally grows rules. Mutates the `rules` array and writes it to the pref. |
+| `applyPass2(plan, workspaceId, rules)` | Executes the plan: moves tabs into existing groups, optionally grows domains, creates new domain rules, and applies kept title-rule patches. Mutates the `rules` array and writes it to the pref. |
 
 ## Pipeline
 
@@ -71,12 +71,18 @@ unmatched tabs (from runPass1)
 
 | Value | Effect |
 |---|---|
-| `always-add` (default) | Move the tab AND append its hostname to the rule's `domains[]`. Rules grow over time. |
-| `transient` | Move the tab only. Rules untouched — next click would have to re-classify the same tabs. |
+| `always-add` / Move + Save Domain (default) | Move the tab AND append its hostname to the rule's `domains[]`. Rules grow over time. |
+| `transient` / Move Once | Move the tab only. Rules untouched — next click would have to re-classify the same tabs. |
 
-### `ai-new-group-behavior` — does not apply in local-AI mode
+### Local Fresh title context
 
-The dropdown affects only the Ollama engine. The local-AI path never invents new groups, so its setting is irrelevant when the AI engine is "Local". See [module-ollama.md](module-ollama.md).
+Local Fresh Rebuild uses title + hostname + fetched page snippet text as transient clustering input. It never persists `titleTerms`; title persistence is Ollama-only and reviewed in the preview modal as separate title-rule proposals.
+
+When the modal is applied, `applyPass2()` treats reviewed title proposals as rule patches: existing rules get deduped `titleTerms[]`, and new title-only rules can be created with empty `domains[]`. Skipped title cards and individually skipped title chips are ignored.
+
+### `ai-new-group-behavior`
+
+For Local, only Fresh Rebuild and Preview + Save Rule create new groups. Group Once title learning is ignored locally. For full reviewed rule-learning behavior, use the Ollama engine. See [module-ollama.md](module-ollama.md).
 
 ## Failure modes
 

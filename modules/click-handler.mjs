@@ -4,7 +4,7 @@
 
 import { CONFIG, LOG, BUILD_VERSION } from "./config.mjs";
 // (CONFIG is used inside the click pipeline for thresholds, pref names, and DOM ids.)
-import { loadRules, readSkipDomainsPref, isMinimalStyle, isStrictRulesEnforced, getAIEngine, getOllamaHost, getOllamaModel, getAINewGroupBehavior, getAIExistingBehavior } from "./rules.mjs";
+import { loadRules, readSkipDomainsPref, isMinimalStyle, isStrictRulesEnforced, getAIEngine, getOllamaHost, getOllamaModel, getAINewGroupBehavior, getAIExistingBehavior, getAITitleLearning } from "./rules.mjs";
 import { getEligibleTabs } from "./tabs.mjs";
 import {
   consolidateDuplicateGroups,
@@ -16,7 +16,7 @@ import {
 } from "./groups.mjs";
 import { runPass1, applyPass1, matchesDomain } from "./pass1.mjs";
 import { runPass2, runPass2Fresh, applyPass2 } from "./ai.mjs";
-import { checkOllamaReady, reportOllamaError, normalizeOllamaHost, runPass2Ollama, runPass2OllamaFresh, classifyExistingGroupsBatch } from "./ollama.mjs";
+import { checkOllamaReady, reportOllamaError, normalizeOllamaHost, runPass2Ollama, runPass2OllamaFresh, classifyExistingGroupsBatch, proposeTitleTermPatches } from "./ollama.mjs";
 import { showPreviewModal } from "./preview-modal.mjs";
 
 // Module-version stamp so we can confirm the latest copy is loaded in the running window.
@@ -25,6 +25,19 @@ console.log(`${LOG} click-handler.mjs loaded — v${BUILD_VERSION}`);
 
 const getTidyButton = () =>
   window.gZenWorkspaces?.activeWorkspaceElement?.querySelector(`#${CONFIG.BUTTON_ID}`) || null;
+
+const buildTitleAuditGroups = (tabs, rules) => {
+  const ruleNameByLower = new Map(rules.map((r) => [String(r.name || "").toLocaleLowerCase(), r.name]));
+  const byName = new Map();
+  for (const tab of tabs || []) {
+    const currentName = tab._tab?.closest("tab-group")?.getAttribute("label") || tab.currentGroup || "";
+    const ruleName = ruleNameByLower.get(String(currentName).toLocaleLowerCase());
+    if (!ruleName) continue;
+    if (!byName.has(ruleName)) byName.set(ruleName, { name: ruleName, tabs: [] });
+    byName.get(ruleName).tabs.push(tab);
+  }
+  return [...byName.values()].filter((g) => g.tabs.length > 0);
+};
 
 const wiggleButton = () => {
   try {
@@ -215,10 +228,23 @@ export const handleOrganizeClick = async () => {
       console.log(`${LOG} Pass 1 apply skipped — ${newGroupBehavior} mode will ${isIdentifyOnly ? "preview" : "reclassify"} all ${tabs.length} tab(s)`);
     }
 
+    const existingBehaviorForTitle = aiEngine === "ollama" ? getAIExistingBehavior() : "";
+    const titleLearningMode = getAITitleLearning();
+    const titleLearningWanted =
+      aiEngine === "ollama" &&
+      titleLearningMode !== "off" &&
+      !isIdentifyOnly &&
+      !isFreshMode &&
+      newGroupBehavior !== "prompt" &&
+      (existingBehaviorForTitle === "always-add" || newGroupBehavior === "auto-add");
+    const titleAuditGroups = titleLearningWanted ? buildTitleAuditGroups(tabs, rules) : [];
+
     // 7. Pass 2 (AI). Fresh-like modes run even when unmatched is empty — they
     // see ALL tabs and may re-cluster rule-matched ones. Other modes only fire
-    // when there's something Pass 1 couldn't place.
-    const shouldRunPass2 = aiEngine !== "off" && (isFreshLike ? tabs.length > 0 : unmatched.length > 0);
+    // when there's something Pass 1 couldn't place. Ollama title learning can
+    // also run as a rule-audit pass over tabs already inside rule groups.
+    const shouldRunPass2 = aiEngine !== "off" &&
+      (isFreshLike ? tabs.length > 0 : unmatched.length > 0 || titleAuditGroups.length > 0);
     if (shouldRunPass2) {
       const inputCount = isFreshLike ? tabs.length : unmatched.length;
       const inputLabel = isFreshLike ? "ALL eligible tab(s)" : "unmatched tab(s)";
@@ -242,6 +268,8 @@ export const handleOrganizeClick = async () => {
             const t0 = performance.now();
             if (isFreshLike) {
               pass2 = await runPass2OllamaFresh(tabs);
+            } else if (unmatched.length === 0) {
+              pass2 = { assignedToExisting: [], newGroups: [], skipped: [] };
             } else {
               pass2 = await runPass2Ollama(unmatched, rules);
               // Stickiness for rule-considering modes: don't let the AI
@@ -307,7 +335,10 @@ export const handleOrganizeClick = async () => {
             }
           }
         }
-        if (pass2.assignedToExisting.length > 0 || pass2.newGroups.length > 0) {
+        if (titleAuditGroups.length > 0) {
+          pass2.titleAuditGroups = titleAuditGroups;
+        }
+        if (pass2.assignedToExisting.length > 0 || pass2.newGroups.length > 0 || titleAuditGroups.length > 0) {
           console.log(`${LOG} Pass 2 plan: ${pass2.assignedToExisting.length} to existing group(s), ${pass2.newGroups.length} new group(s), ${pass2.skipped.length} skipped`);
           if (pass2.assignedToExisting.length > 0) {
             console.table(pass2.assignedToExisting.map((a) => ({
@@ -323,35 +354,51 @@ export const handleOrganizeClick = async () => {
             })));
           }
 
-          // Decide whether to show the Plan Mode modal:
-          //   - Plan Mode (identify-only) → always show (it IS the modal mode);
+          // Decide whether to show the preview modal:
+          //   - Preview Only (identify-only) → always show (it IS the modal mode);
           //     applies to BOTH engines (local Fresh is hostname-named so the
           //     modal lets the user rename / re-assign before applying)
-          //   - Auto-add / Always-add → show so user can veto rule mutations
+          //   - Preview + Save Rule / Move + Save Domain → show so user can veto rule mutations
           //     before they hit the rules table. Ollama-only — those modes imply
           //     LLM-style semantic naming.
-          //   - Transient (either) → no modal (it's just a temp move per user)
-          //   - Prompt → no modal (Zen handles per-group via its own edit modal)
-          //   - Fresh-categories → no modal (no rule mutations happen here)
+          //   - Group Once (either) → no modal (it's just a temp move per user)
+          //   - Zen Edit Prompt → no modal (Zen handles per-group via its own edit modal)
+          //   - Fresh Rebuild → no modal (no rule mutations happen here)
           let planToApply = pass2;
           let showModal = false;
           let modalReason = "";
           if (isIdentifyOnly) {
             showModal = true;
-            modalReason = "Plan Mode";
+            modalReason = "Preview Only";
           } else if (aiEngine === "ollama" && !isFreshMode && newGroupBehavior !== "prompt") {
             const existingBehavior = getAIExistingBehavior();
             const flags = [];
-            if (existingBehavior === "always-add") flags.push("always-add");
-            if (newGroupBehavior === "auto-add") flags.push("auto-add");
+            if (existingBehavior === "always-add") flags.push("Move + Save Domain");
+            if (newGroupBehavior === "auto-add") flags.push("Preview + Save Rule");
             if (flags.length > 0) {
               showModal = true;
               modalReason = flags.join(" + ");
             }
           }
 
+          if (titleAuditGroups.length > 0 && aiEngine === "ollama" && !showModal) {
+            showModal = true;
+            modalReason = "title learning";
+          }
+
           if (showModal) {
-            console.debug(`${LOG} Plan Mode modal opening (${modalReason}) — user must confirm before rules mutate`);
+            if (titleLearningWanted) {
+              pass2.rulePatches = await proposeTitleTermPatches(pass2, rules, getOllamaHost(), getOllamaModel(), titleLearningMode);
+              if (pass2.rulePatches.length === 0 && pass2.assignedToExisting.length === 0 && pass2.newGroups.length === 0) {
+                showModal = false;
+                planToApply = null;
+                console.log(`${LOG} title learning audit: no title-rule proposals`);
+              }
+            }
+          }
+
+          if (showModal) {
+            console.debug(`${LOG} preview modal opening (${modalReason}) — user must confirm before applying`);
             planToApply = await showPreviewModal({
               plan: pass2,
               // "Re-assign to new" — open-ended clustering for pending tabs.
@@ -412,9 +459,9 @@ export const handleOrganizeClick = async () => {
 
           if (planToApply) {
             const ai = applyPass2(planToApply, workspaceId, rules);
-            console.log(`${LOG} Pass 2 applied: ${ai.movedToExisting} tab(s) → existing groups, ${ai.newGroupsCreated} new group(s), ${ai.rulesGrown} rule(s) grown, ${ai.newRulesCreated} new rule(s)`);
+            console.log(`${LOG} Pass 2 applied: ${ai.movedToExisting} tab(s) → existing groups, ${ai.newGroupsCreated} new group(s), ${ai.rulesGrown} domain rule add(s), ${ai.titleTermsGrown || 0} title term add(s), ${ai.newRulesCreated} new rule(s)`);
             // Use the filtered plan's skipped list for the post-apply cleanup
-            // (in Plan Mode, this includes tabs from un-kept groups, which
+            // (in Preview Only, this includes tabs from un-kept groups, which
             // should also get ungrouped from their pre-tidy containers).
             pass2 = planToApply;
 
