@@ -29,8 +29,9 @@ In order, after the rules editor is appended:
 2. **tagSeparatorContainers** — adds `.zao-section-header-row` to the parent `<vbox>` of each `.separator-label`. Tagging is consistent across our injected header and Sine's native ones, even though we don't currently style on it.
 3. **injectSectionDescriptions** — adds a `.zao-pref-description` paragraph as a sibling of each separator container, sourced from a constant list in this module. Idempotent (skips if a description already follows).
 4. **alignSettingRows** — tags native Look & Feel and AI preference rows so labels and controls share fixed columns. Checkbox controls stay first in DOM order for Sine's toggle code, then CSS grid places them in the shared control column.
-5. **setupEnginePrefObserver** — installs an `nsIPrefBranch.addObserver` on `extensions.zen-auto-organize.ai-engine`. On change, re-runs the conditional-fields pass.
-6. **updateConditionalFields** — toggles the `.zao-pref-hidden` class on each AI-related row based on the engine pref. Engine `"off"` hides title learning + existing-behavior + new-group-behavior + all Ollama rows; `"local"` shows new-group behavior plus local batch size and limits new-group choices to the three Local-supported modes; `"ollama"` shows title learning, existing/new behavior, and Ollama host/model/warmup.
+5. **installCustomDropdowns** — hides Sine's native dropdown controls and installs one shared dropdown UI for every dropdown pref. Closed buttons show the short label before the dash separator; opened menus show the full explanatory option labels.
+6. **setupEnginePrefObserver** — installs an `nsIPrefBranch.addObserver` on `extensions.zen-auto-organize.ai-engine`. On change, re-runs the conditional-fields pass.
+7. **updateConditionalFields** — toggles the `.zao-pref-hidden` class on each AI-related row based on the engine pref. Engine `"off"` hides title learning + existing-behavior + new-group-behavior + all Ollama rows; `"local"` shows new-group behavior plus local batch size and limits new-group choices to the three Local-supported modes; `"ollama"` shows title learning, existing/new behavior, and Ollama host/model/warmup.
 
 ## Stylesheet injection
 

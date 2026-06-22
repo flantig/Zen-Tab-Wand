@@ -1,8 +1,17 @@
-/* Zen Tab Wand — pill-style rules table in the Sine settings dialog.
-   Borders/backgrounds are derived from currentColor via color-mix so the
-   widget adapts to whatever theme Zen is running. */
+/* Zen Tab Wand — chrome + settings styles.
 
-/* --- Tab-group collapse fix.
+   Section map:
+   1. Browser tab groups        — collapse fix, minimal mode, gradients, icons
+   2. Toolbar button            — wand wiggle + thinking pulse
+   3. Settings base layout      — descriptions, aligned rows, custom dropdowns
+   4. Rules editor              — rule table, drag handles, chips, skip domains
+   5. Action settings           — backup/restore and custom icon controls
+   6. Color and icon pickers    — swatches, emoji picker, custom icon manager
+   7. Preview and warning modals — AI preview, warnings, spinners */
+
+/* ─── 1. Browser Tab Groups ──────────────────────────────────────────────── */
+
+/* Tab-group collapse fix.
    Firefox's MozTabbrowserTabGroup sets `aria-hidden="true"` on non-selected
    tabs when the group is collapsed, but leaves the visual hiding to CSS.
    Firefox's standard horizontal tab strip ships that CSS; Zen's vertical
@@ -17,7 +26,7 @@ tab-group[collapsed] tab[aria-hidden="true"] {
   display: none !important;
 }
 
-/* --- Look & Feel: minimal mode for rule-matched tab-groups.
+/* Look & Feel: minimal mode for rule-matched tab-groups.
    Overrides Zen's per-group color custom properties with values derived from
    the toolbar / urlbar so groups blend into the chrome instead of standing out. */
 tab-group.zao-minimal {
@@ -58,7 +67,9 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   background-size: contain;
 }
 
-/* --- Toolbar button: wiggle the wand on click --- */
+/* ─── 2. Toolbar Button ──────────────────────────────────────────────────── */
+
+/* Wiggle the wand on click. */
 @keyframes zao-wand-wiggle {
   0%   { transform: rotate(0deg); }
   15%  { transform: rotate(-18deg); }
@@ -88,6 +99,8 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   transform-origin: center;
 }
 
+/* ─── 3. Settings Base Layout ────────────────────────────────────────────── */
+
 /* Inline description paragraph injected under a Sine "separator" header.
    Sine renders separator labels as bold/larger section titles, so verbose
    paragraph text in the label itself breaks the styling. We inject this as a
@@ -103,6 +116,10 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
    rules when applied to a vbox/hbox container. */
 .zao-pref-hidden {
   display: none !important;
+}
+
+.zao-our-dialog .sineItemPreferenceDialogContent {
+  overflow-x: hidden !important;
 }
 
 .zao-control-row,
@@ -125,6 +142,95 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 
 .zao-control-row > menulist {
   margin-inline-start: -4px !important;
+}
+
+.zao-native-dropdown-hidden {
+  display: none !important;
+}
+
+.zao-custom-dropdown {
+  position: relative;
+  justify-self: start;
+}
+
+.zao-custom-dropdown-button {
+  min-height: 38px;
+  max-width: min(620px, 58vw);
+  padding: 0 34px 0 16px;
+  border: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, CanvasText 13%, transparent);
+  color: CanvasText;
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+}
+
+.zao-custom-dropdown-button:hover,
+.zao-custom-dropdown.zao-open > .zao-custom-dropdown-button {
+  background: color-mix(in srgb, CanvasText 18%, transparent);
+  border-color: color-mix(in srgb, CanvasText 18%, transparent);
+}
+
+.zao-custom-dropdown-button::after {
+  content: "⌄";
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  transform: translateY(-54%);
+  font-size: 0.9rem;
+}
+
+.zao-custom-dropdown-menu {
+  display: none;
+  position: absolute;
+  z-index: 10000;
+  inset-inline-start: 0;
+  top: calc(100% + 4px);
+  box-sizing: border-box;
+  min-width: min(100%, calc(100vw - 48px));
+  width: min(760px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  max-height: min(360px, 55vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 8px;
+  background: Canvas;
+  box-shadow: 0 12px 30px color-mix(in srgb, #000 35%, transparent);
+}
+
+.zao-custom-dropdown.zao-open > .zao-custom-dropdown-menu {
+  display: grid;
+  gap: 2px;
+}
+
+.zao-custom-dropdown-item {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: CanvasText;
+  font: inherit;
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.zao-custom-dropdown-item:hover,
+.zao-custom-dropdown-item:focus-visible,
+.zao-custom-dropdown-item.zao-selected {
+  background: color-mix(in srgb, CanvasText 14%, transparent);
+}
+
+.zao-custom-dropdown-item.zao-option-hidden {
+  display: none;
 }
 
 .zao-control-row > input {
@@ -171,6 +277,8 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   display: none !important;
 }
 
+/* ─── 4. Rules Editor ────────────────────────────────────────────────────── */
+
 .zao-rules-editor {
   display: block !important;
   width: 100% !important;
@@ -197,7 +305,7 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   align-items: center;
 }
 
-/* --- Drag-handle grip for reordering rules.
+/* Drag-handle grip for reordering rules.
    Only this element is `draggable`; the rest of the row stays clickable for
    editing inputs / pills without triggering a drag. */
 .zao-row-grip {
@@ -260,6 +368,8 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   font-size: 12px !important;
   padding-right: 6px !important;
 }
+
+/* ─── 5. Action Settings ─────────────────────────────────────────────────── */
 
 /* Action prefs — custom rows that mirror Sine's label/description + control
    layout while keeping our own buttons. */
@@ -528,7 +638,9 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   font-size: 12px;
 }
 
-/* --- Color picker --- */
+/* ─── 6. Color And Icon Pickers ──────────────────────────────────────────── */
+
+/* Color picker. */
 .zao-color-cell {
   display: flex;
   align-items: center;
@@ -872,7 +984,9 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   opacity: 0.7;
 }
 
-/* ─── Identify-only preview modal (Phase 4d) ──────────────────────────────── */
+/* ─── 7. Preview And Warning Modals ──────────────────────────────────────── */
+
+/* Identify-only preview modal (Phase 4d). */
 /* A native <dialog> we inject into chrome://browser/content/browser.xhtml when
    the user picks "Identify only" as the new-group behavior. Renders the AI
    plan with Apply / Cancel; the click-handler only commits on Apply.        */

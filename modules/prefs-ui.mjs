@@ -142,6 +142,72 @@ const CONTROL_ROW_PREFS = [
   CONFIG.AI_LOCAL_BATCH_SIZE_PREF,
 ];
 
+const DROPDOWN_PREFS = [
+  CONFIG.MATCH_MODE_PREF,
+  CONFIG.GRADIENT_STYLE_PREF,
+  CONFIG.AI_ENGINE_PREF,
+  CONFIG.AI_TITLE_LEARNING_PREF,
+  CONFIG.AI_EXISTING_BEHAVIOR_PREF,
+  CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF,
+];
+
+const DROPDOWN_CONFIGS = {
+  [CONFIG.MATCH_MODE_PREF]: {
+    defaultValue: "url-then-title",
+    options: [
+      ["url-only", "URL only"],
+      ["title-only", "Title only"],
+      ["url-then-title", "URL then Title"],
+      ["title-then-url", "Title then URL"],
+    ],
+  },
+  [CONFIG.GRADIENT_STYLE_PREF]: {
+    defaultValue: "left-right",
+    options: [
+      ["left-right", "Left to right"],
+      ["right-left", "Right to left"],
+      ["top-bottom", "Top to bottom"],
+      ["bottom-top", "Bottom to top"],
+      ["diagonal-down", "Diagonal down"],
+      ["diagonal-up", "Diagonal up"],
+      ["radial", "Radial"],
+    ],
+  },
+  [CONFIG.AI_ENGINE_PREF]: {
+    defaultValue: "off",
+    options: [
+      ["off", "None"],
+      ["local", "Local — Built-in model, limited capability"],
+      ["ollama", "Ollama — Stronger model, requires Ollama running locally"],
+    ],
+  },
+  [CONFIG.AI_TITLE_LEARNING_PREF]: {
+    defaultValue: "off",
+    options: [
+      ["off", "None"],
+      ["review-save-simple", "Review and Save (Simple)"],
+      ["review-save-complex", "Review and Save (Complex)"],
+    ],
+  },
+  [CONFIG.AI_EXISTING_BEHAVIOR_PREF]: {
+    defaultValue: "always-add",
+    options: [
+      ["always-add", "Move + Save Domain — Move the tab and add its domain to the matched rule"],
+      ["transient", "Move Once — Move the tab now; do not update saved rules"],
+    ],
+  },
+  [CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF]: {
+    defaultValue: "auto-add",
+    options: [
+      ["auto-add", "Preview + Save Rule — Review first; kept groups become saved rules"],
+      ["transient", "Group Once — Create groups now; do not save rules"],
+      ["prompt", "Zen Edit Prompt — Create groups, then open Zen's rename/color dialog"],
+      ["fresh-categories", "Fresh Rebuild — Ignore current rules and regroup all tabs from scratch"],
+      ["identify-only", "Preview Only — Review/re-assign first; apply groups without saving rules"],
+    ],
+  },
+};
+
 const normalizeMatchModeLabel = (row) => {
   const label = row.querySelector(".sineItemPreferenceLabel") || row.firstElementChild;
   if (!label) return;
@@ -191,6 +257,143 @@ const setupAIEngineChangeFallback = (dialog) => {
   row.addEventListener("click", refresh);
 };
 
+const shortOptionLabel = (label) =>
+  String(label || "").split(/\s+(?:--|—)\s+/)[0].trim();
+
+const dropdownConfig = (prefName) => DROPDOWN_CONFIGS[prefName];
+
+const readStringPref = (prefName, fallback = "") => {
+  try { return Services.prefs.getStringPref(prefName, fallback); }
+  catch { return fallback; }
+};
+
+const writeStringPref = (prefName, value) => {
+  try { Services.prefs.setStringPref(prefName, value); }
+  catch (e) { console.warn(`${LOG} failed to set ${prefName}:`, e); }
+};
+
+const closeCustomDropdowns = (dialog, except = null) => {
+  for (const wrap of dialog.querySelectorAll(".zao-custom-dropdown.zao-open")) {
+    if (wrap === except) continue;
+    wrap.classList.remove("zao-open");
+    wrap.querySelector(".zao-custom-dropdown-button")?.setAttribute("aria-expanded", "false");
+  }
+};
+
+const selectedDropdownOption = (config, value) =>
+  config.options.find(([v]) => v === value) || config.options.find(([v]) => v === config.defaultValue) || config.options[0];
+
+const syncCustomDropdown = (dialog, prefName) => {
+  const row = findPrefRow(dialog, prefName);
+  const wrap = row?.querySelector(".zao-custom-dropdown");
+  const config = dropdownConfig(prefName);
+  if (!row || !wrap || !config) return;
+
+  const value = readStringPref(prefName, config.defaultValue);
+  const selected = selectedDropdownOption(config, value);
+  const button = wrap.querySelector(".zao-custom-dropdown-button");
+  const label = selected?.[1] || "";
+  button.textContent = shortOptionLabel(label);
+  button.title = label;
+  button.dataset.value = selected?.[0] || "";
+  for (const item of wrap.querySelectorAll(".zao-custom-dropdown-item")) {
+    const isSelected = item.dataset.value === button.dataset.value;
+    item.classList.toggle("zao-selected", isSelected);
+    item.setAttribute("aria-selected", isSelected ? "true" : "false");
+  }
+};
+
+const installCustomDropdown = (dialog, prefName) => {
+  const row = findPrefRow(dialog, prefName);
+  const config = dropdownConfig(prefName);
+  if (!row || !config || row._zaoCustomDropdown) return;
+  row._zaoCustomDropdown = true;
+
+  for (const control of row.querySelectorAll("select, menulist, button:not(.zao-custom-dropdown-button), [role='button']:not(.zao-custom-dropdown-button)")) {
+    control.classList.add("zao-native-dropdown-hidden");
+    control.setAttribute("aria-hidden", "true");
+    control.tabIndex = -1;
+  }
+
+  const wrap = h("div", { class: "zao-custom-dropdown" });
+  wrap.dataset.pref = prefName;
+  const button = h("button", { class: "zao-custom-dropdown-button" });
+  button.type = "button";
+  button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
+  const menu = h("div", { class: "zao-custom-dropdown-menu" });
+  menu.setAttribute("role", "listbox");
+
+  for (const [value, label] of config.options) {
+    const item = h("button", { class: "zao-custom-dropdown-item", text: label });
+    item.type = "button";
+    item.dataset.value = value;
+    item.dataset.fullLabel = label;
+    item.setAttribute("role", "option");
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      writeStringPref(prefName, value);
+      closeCustomDropdowns(dialog);
+      syncCustomDropdown(dialog, prefName);
+      updateConditionalFields(dialog);
+    });
+    menu.appendChild(item);
+  }
+
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const willOpen = !wrap.classList.contains("zao-open");
+    closeCustomDropdowns(dialog, wrap);
+    wrap.classList.toggle("zao-open", willOpen);
+    button.setAttribute("aria-expanded", willOpen ? "true" : "false");
+  });
+  button.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeCustomDropdowns(dialog);
+      button.focus();
+    }
+    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      wrap.classList.add("zao-open");
+      button.setAttribute("aria-expanded", "true");
+      wrap.querySelector(".zao-custom-dropdown-item:not(.zao-option-hidden)")?.focus();
+    }
+  });
+  menu.addEventListener("keydown", (e) => {
+    const items = [...menu.querySelectorAll(".zao-custom-dropdown-item:not(.zao-option-hidden)")];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === "Escape") {
+      closeCustomDropdowns(dialog);
+      button.focus();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      items[Math.min(i + 1, items.length - 1)]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      items[Math.max(i - 1, 0)]?.focus();
+    }
+  });
+
+  wrap.appendChild(button);
+  wrap.appendChild(menu);
+  row.appendChild(wrap);
+  syncCustomDropdown(dialog, prefName);
+};
+
+const installCustomDropdowns = (dialog) => {
+  if (!dialog._zaoCustomDropdownClose) {
+    dialog._zaoCustomDropdownClose = true;
+    document.addEventListener("click", (e) => {
+      if (!dialog.isConnected || dialog.contains(e.target)) return;
+      closeCustomDropdowns(dialog);
+    });
+    dialog.addEventListener("click", (e) => {
+      if (!e.target.closest?.(".zao-custom-dropdown")) closeCustomDropdowns(dialog);
+    });
+  }
+  for (const prefName of DROPDOWN_PREFS) installCustomDropdown(dialog, prefName);
+};
+
 const normalizeAIEngineValue = (value) => {
   const v = String(value || "").toLocaleLowerCase();
   if (v === "") return "";
@@ -208,6 +411,9 @@ const normalizeAIEngineValue = (value) => {
 const readSelectedAIEngineFromDialog = (dialog) => {
   const row = findPrefRow(dialog, CONFIG.AI_ENGINE_PREF);
   if (!row) return "";
+
+  const customValue = normalizeAIEngineValue(row.querySelector(".zao-custom-dropdown-button")?.dataset.value);
+  if (customValue) return customValue;
 
   for (const control of row.querySelectorAll("select, menulist, button, input")) {
     const value = normalizeAIEngineValue(control.value || control.getAttribute?.("value"));
@@ -265,6 +471,17 @@ const setNewGroupOptionsForEngine = (dialog, engine) => {
       try { Services.prefs.setStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "auto-add"); } catch {}
     }
   }
+
+  const custom = row.querySelector(".zao-custom-dropdown");
+  if (custom) {
+    for (const item of custom.querySelectorAll(".zao-custom-dropdown-item")) {
+      const hidden = !allowed.has(item.dataset.value);
+      item.classList.toggle("zao-option-hidden", hidden);
+      item.disabled = hidden;
+      item.setAttribute("aria-hidden", hidden ? "true" : "false");
+    }
+    syncCustomDropdown(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF);
+  }
 };
 
 const updateConditionalFields = (dialog) => {
@@ -305,6 +522,7 @@ const updateConditionalFields = (dialog) => {
   setHidden(rows.ollamaWarmup,      engine !== "ollama");
   setHidden(rows.localBatchSize,    !isLocalOrOllama);
   setNewGroupOptionsForEngine(dialog, engine);
+  for (const prefName of DROPDOWN_PREFS) syncCustomDropdown(dialog, prefName);
   alignSettingRows(dialog);
 };
 
@@ -541,6 +759,7 @@ const performInject = (dialog) => {
 
   tagSeparatorContainers(dialog);
   injectSectionDescriptions(dialog);
+  installCustomDropdowns(dialog);
   setupEnginePrefObserver();
   updateConditionalFields(dialog);
   setupAIEngineChangeFallback(dialog);
