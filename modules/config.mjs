@@ -108,10 +108,10 @@ export const isUnsetLabel = (label) => !label || label === ZEN_UNSET_LABEL;
 // Fallback rules if rules.json is missing or malformed AND the Sine pref is unset.
 export const DEFAULT_RULES = [
   { name: "Calendar", domains: ["calendar.google.com", "connect.garmin.com"] },
-  { name: "AI Tools", domains: ["chat.openai.com", "gemini.google.com", "perplexity.ai"] },
-  { name: "Dev",      domains: ["dashboard.render.com", "github.com", "stackoverflow.com"] },
-  { name: "Shopping", domains: ["amazon.com", "staples.com", "ebay.com"] },
-  { name: "Social",   domains: ["reddit.com", "x.com", "bsky.app"] },
+  { name: "AI Tools", domains: ["chat.openai.com", "chatgpt.com", "gemini.google.com", "perplexity.ai", "claude.ai", "copilot.microsoft.com", "deepseek.com"] },
+  { name: "Dev",      domains: ["dashboard.render.com", "github.com", "stackoverflow.com", "gitlab.com", "developer.mozilla.org", "npmjs.com", "docs.github.com"] },
+  { name: "Shopping", domains: ["amazon.com", "staples.com", "ebay.com", "walmart.com", "target.com"] },
+  { name: "Social",   domains: ["reddit.com", "x.com", "bsky.app", "linkedin.com", "threads.net"] },
   { name: "Search",   domains: ["google.com", "duckduckgo.com"] },
 ];
 

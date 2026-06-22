@@ -6,7 +6,7 @@ All read/write access to the rules pref + the file fallback. Cleans malformed in
 
 | Name | Returns | Notes |
 |---|---|---|
-| `readRulesPref()` | `Rule[] \| null` | Reads the JSON pref, validates each entry, drops rules with empty `name` or no usable `domains`. Returns `null` if the pref is unset or unparseable. |
+| `readRulesPref()` | `Rule[] \| null` | Reads the JSON pref, validates each entry, drops rules with empty `name` or no usable `domains`/`titleTerms`. Returns `null` if the pref is unset or unparseable. |
 | `writeRulesPref(rules)` | void | Serializes and stores. |
 | `validateRules(data)` | `Rule[]` | For rules.json file content — throws on bad input. |
 | `loadRules()` | async `Rule[]` | Precedence: pref → rules.json file → `DEFAULT_RULES`. |
@@ -31,11 +31,13 @@ All read/write access to the rules pref + the file fallback. Cleans malformed in
   titleTerms: ["schedule"], // optional — case-insensitive substring matches
   color: "blue",   // optional — Zen palette name OR hex like "#abc"
   color2: "#8cf",  // optional — second color for a gradient
-  icon: "📅"       // optional — plain-text icon
+  icon: "📅"       // optional — plain-text icon or custom:<id>
 }
 ```
 
 `domains` and `titleTerms` are both optional at the JSON boundary, but a runnable rule needs a name plus at least one domain or title term. `readRulesPref` is permissive on `color` and `color2`: accepts both a Zen palette name and a hex value. Anything else gets dropped.
+
+The built-in defaults intentionally stay small and only seed fresh installs or fallback loads: Calendar, AI Tools, Dev, Shopping, Social, and Search. Once a user has a rules pref, default changes do not overwrite it.
 
 ## Why the pref is a JSON string, not a struct
 

@@ -34,6 +34,8 @@ After install, a wand icon appears in your toolbar's workspace separator. Left-c
 
 ![Zen Tab Wand settings panel](docs/images/settings-panel.png)
 
+Fresh installs start with a small set of editable default groups: Calendar, AI Tools, Dev, Shopping, Social, and Search. Existing user rules are not overwritten when these defaults change.
+
 ## Growing rules from the tab right-click
 
 Right-click any tab → **Add "host" to Rule…** — a submenu pops up listing every current rule. Pick one and the tab's hostname is appended to that rule's domain list. Rules already containing this hostname are listed with a ✓ and disabled. The bottom of the submenu also has a **Skip** entry that adds the hostname to the Skip Domains list.
@@ -137,6 +139,7 @@ In Ollama **Auto-add** (new group) and **Always-add** (existing group) modes, ta
 
 - **Skip Domains** — a list of hostnames the wand should never touch. Tabs matching any pattern get ejected from any group and parked at the top of the workspace on every click. Useful for tabs you want to always keep visible and ungrouped. Grow the list from a tab right-click → **Add "host" to Rule…** → **Skip**.
 - **Rule matching priority** — choose URL only, Title only, URL then Title, or Title then URL. The rule list is still first-match-wins within whichever source is being checked.
+- **Custom Icons** — upload local image icons and manage the custom-only picker list. Uploaded icons are stored locally and can be assigned from the rule icon picker.
 - **Strict rule enforcement** — when on, tabs sitting inside a group without any currently matching rule get ejected to the top on every wand click. Off by default.
 - **Minimal style** — strips the colored backgrounds and gradients from groups for a flatter look. Rule icons stay visible.
 - **Keep Ollama model warm** — preloads the model at browser startup and keeps it in VRAM between clicks. Faster, but uses VRAM continuously.
@@ -153,8 +156,8 @@ In Ollama **Auto-add** (new group) and **Always-add** (existing group) modes, ta
 
 Inside the settings panel under **Backup & Restore**:
 
-- **Export** saves your rules + skip-domains as a JSON file in your default Downloads folder, named like `wand-backup-6groups-20260519-223045.json` (mod prefix + rule count + UTC timestamp). The file also appears in Firefox's downloads panel (`Ctrl+Shift+Y`).
-- **Import…** replaces both lists from a JSON file you pick. Accepts either the current `{ "rules": […], "skipDomains": […] }` shape or a legacy bare rules array.
+- **Export** saves your rules, skip domains, and uploaded custom icons as a JSON file in your default Downloads folder, named like `wand-backup-6groups-20260519-223045.json` (mod prefix + rule count + UTC timestamp). The file also appears in Firefox's downloads panel (`Ctrl+Shift+Y`).
+- **Import…** replaces the included lists from a JSON file you pick. Accepts either the current `{ "rules": […], "skipDomains": […], "customIcons": […] }` shape or a legacy bare rules array. If an imported rule references a missing custom icon, that rule's icon is cleared.
 
 ## Privacy
 
