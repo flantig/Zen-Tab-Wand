@@ -28,8 +28,9 @@ In order, after the rules editor is appended:
 1. **buildRulesEditor + buildSkipDomainsEditor + buildBackupRestoreSection** — three custom blocks inserted as siblings of their respective Sine separators (Group Rules / Skip Domains / Backup & Restore) declared in `preferences.json`. `findSeparatorContainer(dialog, "Group Rules")` locates the separator container, then `insertAfter()` drops our content as its next sibling. All three sections inherit Sine's native separator styling.
 2. **tagSeparatorContainers** — adds `.zao-section-header-row` to the parent `<vbox>` of each `.separator-label`. Tagging is consistent across our injected header and Sine's native ones, even though we don't currently style on it.
 3. **injectSectionDescriptions** — adds a `.zao-pref-description` paragraph as a sibling of each separator container, sourced from a constant list in this module. Idempotent (skips if a description already follows).
-4. **setupEnginePrefObserver** — installs an `nsIPrefBranch.addObserver` on `extensions.zen-auto-organize.ai-engine`. On change, re-runs the conditional-fields pass.
-5. **updateConditionalFields** — toggles the `.zao-pref-hidden` class on each AI-related row based on the engine pref. Engine `"off"` hides existing-behavior + new-group-behavior + all Ollama rows; `"local"` shows only existing-behavior; `"ollama"` shows everything.
+4. **alignCheckboxRows** — tags checkbox preference rows so their controls align on the right, matching the dropdown/action-row layout.
+5. **setupEnginePrefObserver** — installs an `nsIPrefBranch.addObserver` on `extensions.zen-auto-organize.ai-engine`. On change, re-runs the conditional-fields pass.
+6. **updateConditionalFields** — toggles the `.zao-pref-hidden` class on each AI-related row based on the engine pref. Engine `"off"` hides existing-behavior + new-group-behavior + all Ollama rows; `"local"` shows only existing-behavior; `"ollama"` shows everything.
 
 ## Stylesheet injection
 

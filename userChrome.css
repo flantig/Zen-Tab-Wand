@@ -103,6 +103,21 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   display: none !important;
 }
 
+.zao-checkbox-right {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  column-gap: 12px !important;
+  align-items: center !important;
+}
+
+.zao-checkbox-right input[type="checkbox"],
+.zao-checkbox-right checkbox,
+.zao-checkbox-right [role="checkbox"],
+.zao-checkbox-control {
+  justify-self: end !important;
+  margin-inline-start: auto !important;
+}
+
 .zao-rules-editor {
   display: block !important;
   width: 100% !important;
