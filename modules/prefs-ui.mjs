@@ -231,10 +231,27 @@ const readSelectedAIEngineFromDialog = (dialog) => {
   return "";
 };
 
+const prefRowDebug = (row) => {
+  if (!row) return null;
+  const control = row.querySelector("select, menulist, button, input");
+  return {
+    id: row.id || "",
+    classes: row.className || "",
+    hiddenClass: row.classList?.contains("zao-pref-hidden") || false,
+    controlTag: control?.tagName || "",
+    controlValue: control?.value || control?.getAttribute?.("value") || "",
+    controlLabel: control?.label || control?.getAttribute?.("label") || "",
+    controlText: (control?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 140),
+    rowText: (row.textContent || "").replace(/\s+/g, " ").trim().slice(0, 180),
+  };
+};
+
 const updateConditionalFields = (dialog) => {
   // Prefer the visible control because Sine may update the UI before the pref
   // observer sees the committed value. Fall back to the stored pref on reopen.
-  const engine = readSelectedAIEngineFromDialog(dialog) || getAIEngine();
+  const uiEngine = readSelectedAIEngineFromDialog(dialog);
+  const prefEngine = getAIEngine();
+  const engine = uiEngine || prefEngine;
   const isLocalOrOllama = engine === "local" || engine === "ollama";
 
   const setHidden = (row, hidden) => {
@@ -248,15 +265,33 @@ const updateConditionalFields = (dialog) => {
   //   Existing-behavior is hidden because Local unifies both decisions into
   //   the single dropdown (auto-add = grow rules; transient = don't; fresh =
   //   re-cluster ignoring rules entirely).
-  setHidden(findPrefRow(dialog, CONFIG.AI_EXISTING_BEHAVIOR_PREF), engine !== "ollama");
-  setHidden(findPrefRow(dialog, CONFIG.AI_TITLE_LEARNING_PREF), engine !== "ollama");
-  const newGroupBehaviorRow = findPrefRow(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF);
-  setHidden(newGroupBehaviorRow, !isLocalOrOllama);
-  setHidden(findPrefRow(dialog, CONFIG.AI_OLLAMA_HOST_PREF),        engine !== "ollama");
-  setHidden(findPrefRow(dialog, CONFIG.AI_OLLAMA_MODEL_PREF),       engine !== "ollama");
-  setHidden(findPrefRow(dialog, CONFIG.AI_OLLAMA_WARMUP_PREF),      engine !== "ollama");
-  setHidden(findPrefRow(dialog, CONFIG.AI_LOCAL_BATCH_SIZE_PREF),   !isLocalOrOllama);
+  const rows = {
+    engine: findPrefRow(dialog, CONFIG.AI_ENGINE_PREF),
+    titleLearning: findPrefRow(dialog, CONFIG.AI_TITLE_LEARNING_PREF),
+    existingBehavior: findPrefRow(dialog, CONFIG.AI_EXISTING_BEHAVIOR_PREF),
+    newGroupBehavior: findPrefRow(dialog, CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF),
+    ollamaHost: findPrefRow(dialog, CONFIG.AI_OLLAMA_HOST_PREF),
+    ollamaModel: findPrefRow(dialog, CONFIG.AI_OLLAMA_MODEL_PREF),
+    ollamaWarmup: findPrefRow(dialog, CONFIG.AI_OLLAMA_WARMUP_PREF),
+    localBatchSize: findPrefRow(dialog, CONFIG.AI_LOCAL_BATCH_SIZE_PREF),
+  };
+
+  setHidden(rows.existingBehavior, engine !== "ollama");
+  setHidden(rows.titleLearning, engine !== "ollama");
+  setHidden(rows.newGroupBehavior, !isLocalOrOllama);
+  setHidden(rows.ollamaHost,        engine !== "ollama");
+  setHidden(rows.ollamaModel,       engine !== "ollama");
+  setHidden(rows.ollamaWarmup,      engine !== "ollama");
+  setHidden(rows.localBatchSize,    !isLocalOrOllama);
   alignSettingRows(dialog);
+
+  console.log(`${LOG} prefs conditional`, {
+    uiEngine,
+    prefEngine,
+    engine,
+    isLocalOrOllama,
+    rows: Object.fromEntries(Object.entries(rows).map(([key, row]) => [key, prefRowDebug(row)])),
+  });
 };
 
 // First-time AI engine warning modals.
