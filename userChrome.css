@@ -132,8 +132,8 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 .zao-checkbox-right checkbox,
 .zao-checkbox-right [role="checkbox"],
 .zao-checkbox-control {
-  justify-self: end !important;
-  margin-inline-start: auto !important;
+  justify-self: start !important;
+  margin-inline-start: 14px !important;
 }
 
 .zao-rules-editor {
@@ -244,7 +244,7 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
 }
 
 .zao-action-pref-title {
-  font-size: 13px !important;
+  font-size: inherit !important;
   line-height: 1.35 !important;
 }
 

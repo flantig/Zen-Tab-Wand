@@ -534,10 +534,9 @@ export const buildCustomIconsEditor = () => {
   const container = h("div", { class: "zao-custom-icons-editor" });
   const row = h("div", { class: "zao-action-pref" });
   const text = h("div", { class: "zao-action-pref-text" });
-  text.appendChild(h("div", { class: "zao-action-pref-title", text: "Custom icons" }));
   text.appendChild(h("div", {
-    class: "zao-action-pref-description",
-    text: "Upload local image icons and manage the custom-only picker list.",
+    class: "zao-action-pref-title",
+    text: "Custom Icons — Upload local image icons and manage the custom-only picker list.",
   }));
   const bar = h("div", { class: "zao-action-pref-actions" });
   const upload = h("button", { class: "zao-backup-btn", text: "Upload icons..." });
@@ -681,10 +680,6 @@ export const buildBackupRestoreSection = () => {
   const row = h("div", { class: "zao-action-pref" });
   const text = h("div", { class: "zao-action-pref-text" });
   text.appendChild(h("div", { class: "zao-action-pref-title", text: "Backup and restore" }));
-  text.appendChild(h("div", {
-    class: "zao-action-pref-description",
-    text: "Export or replace rules, skip domains, and custom icons.",
-  }));
   const bar = h("div", { class: "zao-action-pref-actions" });
 
   const exportBtn = h("button", { class: "zao-backup-btn", text: "Export" });
