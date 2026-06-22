@@ -26,6 +26,19 @@ console.log(`${LOG} click-handler.mjs loaded — v${BUILD_VERSION}`);
 const getTidyButton = () =>
   window.gZenWorkspaces?.activeWorkspaceElement?.querySelector(`#${CONFIG.BUTTON_ID}`) || null;
 
+const buildTitleAuditGroups = (tabs, rules) => {
+  const ruleNameByLower = new Map(rules.map((r) => [String(r.name || "").toLocaleLowerCase(), r.name]));
+  const byName = new Map();
+  for (const tab of tabs || []) {
+    const currentName = tab._tab?.closest("tab-group")?.getAttribute("label") || tab.currentGroup || "";
+    const ruleName = ruleNameByLower.get(String(currentName).toLocaleLowerCase());
+    if (!ruleName) continue;
+    if (!byName.has(ruleName)) byName.set(ruleName, { name: ruleName, tabs: [] });
+    byName.get(ruleName).tabs.push(tab);
+  }
+  return [...byName.values()].filter((g) => g.tabs.length > 0);
+};
+
 const wiggleButton = () => {
   try {
     const button = getTidyButton();
@@ -215,10 +228,22 @@ export const handleOrganizeClick = async () => {
       console.log(`${LOG} Pass 1 apply skipped — ${newGroupBehavior} mode will ${isIdentifyOnly ? "preview" : "reclassify"} all ${tabs.length} tab(s)`);
     }
 
+    const existingBehaviorForTitle = aiEngine === "ollama" ? getAIExistingBehavior() : "";
+    const titleLearningWanted =
+      aiEngine === "ollama" &&
+      getAITitleLearning() === "review-save" &&
+      !isIdentifyOnly &&
+      !isFreshMode &&
+      newGroupBehavior !== "prompt" &&
+      (existingBehaviorForTitle === "always-add" || newGroupBehavior === "auto-add");
+    const titleAuditGroups = titleLearningWanted ? buildTitleAuditGroups(tabs, rules) : [];
+
     // 7. Pass 2 (AI). Fresh-like modes run even when unmatched is empty — they
     // see ALL tabs and may re-cluster rule-matched ones. Other modes only fire
-    // when there's something Pass 1 couldn't place.
-    const shouldRunPass2 = aiEngine !== "off" && (isFreshLike ? tabs.length > 0 : unmatched.length > 0);
+    // when there's something Pass 1 couldn't place. Ollama title learning can
+    // also run as a rule-audit pass over tabs already inside rule groups.
+    const shouldRunPass2 = aiEngine !== "off" &&
+      (isFreshLike ? tabs.length > 0 : unmatched.length > 0 || titleAuditGroups.length > 0);
     if (shouldRunPass2) {
       const inputCount = isFreshLike ? tabs.length : unmatched.length;
       const inputLabel = isFreshLike ? "ALL eligible tab(s)" : "unmatched tab(s)";
@@ -242,6 +267,8 @@ export const handleOrganizeClick = async () => {
             const t0 = performance.now();
             if (isFreshLike) {
               pass2 = await runPass2OllamaFresh(tabs);
+            } else if (unmatched.length === 0) {
+              pass2 = { assignedToExisting: [], newGroups: [], skipped: [] };
             } else {
               pass2 = await runPass2Ollama(unmatched, rules);
               // Stickiness for rule-considering modes: don't let the AI
@@ -307,7 +334,10 @@ export const handleOrganizeClick = async () => {
             }
           }
         }
-        if (pass2.assignedToExisting.length > 0 || pass2.newGroups.length > 0) {
+        if (titleAuditGroups.length > 0) {
+          pass2.titleAuditGroups = titleAuditGroups;
+        }
+        if (pass2.assignedToExisting.length > 0 || pass2.newGroups.length > 0 || titleAuditGroups.length > 0) {
           console.log(`${LOG} Pass 2 plan: ${pass2.assignedToExisting.length} to existing group(s), ${pass2.newGroups.length} new group(s), ${pass2.skipped.length} skipped`);
           if (pass2.assignedToExisting.length > 0) {
             console.table(pass2.assignedToExisting.map((a) => ({
@@ -350,13 +380,23 @@ export const handleOrganizeClick = async () => {
             }
           }
 
+          if (titleAuditGroups.length > 0 && aiEngine === "ollama" && !showModal) {
+            showModal = true;
+            modalReason = "title learning";
+          }
+
           if (showModal) {
-            if (!isIdentifyOnly && !isFreshMode && aiEngine === "ollama" && getAITitleLearning() === "review-save") {
-              const existingBehavior = getAIExistingBehavior();
-              if (existingBehavior === "always-add" || newGroupBehavior === "auto-add") {
-                pass2.rulePatches = await proposeTitleTermPatches(pass2, rules, getOllamaHost(), getOllamaModel());
+            if (titleLearningWanted) {
+              pass2.rulePatches = await proposeTitleTermPatches(pass2, rules, getOllamaHost(), getOllamaModel());
+              if (pass2.rulePatches.length === 0 && pass2.assignedToExisting.length === 0 && pass2.newGroups.length === 0) {
+                showModal = false;
+                planToApply = null;
+                console.log(`${LOG} title learning audit: no title-rule proposals`);
               }
             }
+          }
+
+          if (showModal) {
             console.debug(`${LOG} Plan Mode modal opening (${modalReason}) — user must confirm before rules mutate`);
             planToApply = await showPreviewModal({
               plan: pass2,

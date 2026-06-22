@@ -73,6 +73,9 @@ const isUsefulTitleToken = (token, hostname = "") => {
 
 const allPlanGroups = (plan) => {
   const byName = new Map();
+  for (const g of plan?.titleAuditGroups || []) {
+    byName.set(g.name, { name: g.name, tabs: [...(g.tabs || [])] });
+  }
   for (const g of plan?.newGroups || []) {
     byName.set(g.name, { name: g.name, tabs: [...(g.tabs || [])] });
   }

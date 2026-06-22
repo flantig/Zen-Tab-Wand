@@ -31,7 +31,7 @@ Earlier merge-prompt iterations asked the model to return nested `[{name, from: 
 
 ## Title learning
 
-When `ai-title-learning = "review-save"`, Ollama rule-mutating flows can add reviewed `T` chips to rules. The main model pass still decides tab movement/domain groups; title learning is a separate follow-up prompt that categorizes compact title keywords by their underlying topic instead of the host/provider where they appeared. For example, search-result titles containing `mtg` should learn a card-game title rule, not a `Search` rule. The preview modal shows title proposals in their own section, and applying the modal saves only kept title-rule proposals.
+When `ai-title-learning = "review-save"`, Ollama rule-mutating flows can add reviewed `T` chips to rules. The main model pass still decides tab movement/domain groups; title learning is a separate follow-up prompt that categorizes compact title keywords by their underlying topic instead of the host/provider where they appeared. For example, search-result titles containing `mtg` should learn a card-game title rule, not a `Search` rule. The helper can also audit tabs already inside rule-named groups via `plan.titleAuditGroups`, so title proposals can appear even when Pass 2 has no unmatched tabs to move. The preview modal shows title proposals in their own section, and applying the modal saves only kept title-rule proposals.
 
 ## Lifecycle: warmup + keep-alive
 

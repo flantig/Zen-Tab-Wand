@@ -132,7 +132,7 @@ Applies to both engines. The Local engine supports **Auto-add**, **Transient**, 
 
 ![Plan Mode modal](docs/images/plan-mode-modal.png)
 
-Ollama can also propose reviewed title chips (`T`) from tab titles when **AI title learning** is set to **Review and Save**. Proposed title chips appear in a separate title-rules section of the preview modal and are saved only when kept. Local Fresh Categories uses titles as transient clustering context but never saves title terms.
+Ollama can also propose reviewed title chips (`T`) from tab titles when **AI title learning** is set to **Review and Save**. Proposed title chips appear in a separate title-rules section of the preview modal and are saved only when kept. This can audit tabs already sitting inside rule-named groups, even when there are no unmatched tabs to move. Local Fresh Categories uses titles as transient clustering context but never saves title terms.
 
 ### Stickiness in Auto-add / Always-add
 
