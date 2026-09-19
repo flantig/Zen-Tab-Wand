@@ -56,7 +56,8 @@ export const CONFIG = {
 
   // AI Sorting (Pass 2). Engine governed by AI_ENGINE_PREF:
   //   "off"    — no AI pass
-  //   "local"  — Firefox's bundled ML engine (modules/ai.mjs), existing-groups only
+  //   "local"  — Firefox's bundled ML engine (modules/ai.mjs), existing + new groups
+  //              (new-group clustering added via TIDY_FUSION — see ai.mjs)
   //   "ollama" — local Ollama daemon (modules/ollama.mjs), existing + new groups
   AI_ENGINE_PREF: "extensions.zen-auto-organize.ai-engine",
   AI_TITLE_LEARNING_PREF: "extensions.zen-auto-organize.ai-title-learning",
@@ -80,6 +81,12 @@ export const CONFIG = {
   AI_EXISTING_GROUP_THRESHOLD: 0.65,    // min (raw + boost) cosine sim for "tab belongs to existing group"
   AI_EXISTING_GROUP_BOOST: 0.10,        // added to existing-group sim
   AI_EMBEDDING_BATCH_SIZE: 5,           // tabs per parallel embedding batch (small-workspace default)
+  // Raw cosine bar for greedily clustering LEFTOVER (no-existing-group-match)
+  // tabs into brand-new groups (TIDY_FUSION, modules/ai.mjs clusterEmbeddings).
+  // Deliberately looser than AI_EXISTING_GROUP_THRESHOLD's effective ~0.55 raw —
+  // these tabs already failed the strict existing-group bar, so this is a
+  // lower bar for "loosely on the same topic" rather than "slam dunk".
+  TIDY_LOW: 0.45,
 
   // Local-AI chunking. When the count of unmatched tabs to embed exceeds the
   // chunking threshold, the engine switches to a more conservative pipeline:

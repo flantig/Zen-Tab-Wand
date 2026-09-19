@@ -17,9 +17,9 @@
 //      AI_EXISTING_GROUP_THRESHOLD (with AI_EXISTING_GROUP_BOOST added).
 //
 // applyPass2 actually moves tabs / creates groups / updates rules per the
-// "AI existing behavior" + "AI new-group behavior" prefs. (`newGroups` is
-// always returned empty by runPass2; new-group creation in non-Ollama flows
-// is a no-op.)
+// "AI existing behavior" + "AI new-group behavior" prefs. `newGroups` can now
+// be non-empty from THIS engine too (see TIDY_FUSION below) — callers must not
+// assume local-engine new-group creation is a no-op.
 
 import { CONFIG, LOG, PRESET_COLORS } from "./config.mjs";
 import {
@@ -357,7 +357,12 @@ const nameClusterWithTopic = async (members) => {
       .map((l) => l.trim())
       .find((l) => l);
     if (!name || /none|adult content/i.test(name)) return fallback();
-    name = titleCase(name)
+    // titleCaseToken (not titleCase) — the model's output is typically a
+    // multi-word phrase ("machine learning tools"), and titleCase only
+    // capitalizes the first character of the whole string, lower-casing
+    // every other word. titleCaseToken capitalizes each word/segment,
+    // matching how every other naming path in this file titles its output.
+    name = titleCaseToken(name)
       .replace(/^['"`]+|['"`]+$/g, "")
       .replace(/[.?!,:;]+$/, "")
       .slice(0, 24);
@@ -502,7 +507,15 @@ export const runPass2 = async (unmatched, rules, workspaceId) => {
       remainder.map((r) => r.embedding),
       CONFIG.TIDY_LOW
     );
+    // Defensive: clusterEmbeddings is expected to partition every index into
+    // exactly one group, but don't assume it — track what it actually covers
+    // so a bad/missing threshold (or any future change to clusterEmbeddings)
+    // degrades to "tab reported as skipped" rather than "tab silently
+    // vanishes from the Pass-2 result" (it would appear in neither
+    // assignedToExisting, newGroups, nor skipped otherwise).
+    const covered = new Set();
     for (const idx of idxGroups) {
+      idx.forEach((k) => covered.add(k));
       if (idx.length < 2) {
         idx.forEach((k) => skipped.push(remainder[k].info));
         continue;
@@ -512,6 +525,9 @@ export const runPass2 = async (unmatched, rules, workspaceId) => {
       newGroups.push({ name, tabs: members });
       console.log(`${LOG} AI: new cluster "${name}" (${members.length} tab(s))`);
     }
+    remainder.forEach((r, k) => {
+      if (!covered.has(k)) skipped.push(r.info);
+    });
   } else {
     remainder.forEach((r) => skipped.push(r.info));
   }

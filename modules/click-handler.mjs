@@ -80,6 +80,36 @@ const actionFor = (currentGroup, targetGroup) => {
   return "group";                           // tab is currently ungrouped
 };
 
+// Stickiness for rule-considering modes: don't let the AI pull a tab OUT of
+// a user-organized group INTO a brand-new AI-invented category. Reclassifying
+// into an EXISTING group (assignedToExisting) is still allowed — that's the
+// wand correcting wrong placement. Fresh / identify-only opt out of this by
+// design (those modes are full re-orgs), so callers only apply this to plain
+// runPass2 / runPass2Ollama results, never runPass2Fresh / runPass2OllamaFresh.
+// Applies regardless of which engine produced newGroups — TIDY_FUSION means
+// the local engine can invent new groups too now, so this can no longer be
+// Ollama-only.
+const applyStickiness = (pass2) => {
+  if (!pass2.newGroups?.length) return;
+  const displaced = [];
+  for (const g of pass2.newGroups) {
+    const stays = [];
+    for (const t of g.tabs) {
+      if (t.currentGroup) displaced.push(t);
+      else stays.push(t);
+    }
+    g.tabs = stays;
+  }
+  pass2.newGroups = pass2.newGroups.filter((g) => g.tabs.length > 0);
+  if (displaced.length > 0) {
+    console.log(
+      `${LOG} stickiness: kept ${displaced.length} already-grouped tab(s) in place rather than moving to new AI group(s):`,
+      displaced.map((t) => `${t.hostname} (in "${t.currentGroup}")`)
+    );
+    pass2.skipped = [...(pass2.skipped || []), ...displaced];
+  }
+};
+
 export const handleOrganizeClick = async () => {
   wiggleButton();
 
@@ -142,11 +172,14 @@ export const handleOrganizeClick = async () => {
   // Read AI engine + new-group behavior up-front so the Pass 1 diagnostic table
   // below can show the action that would follow given the current mode.
   const aiEngine = getAIEngine();
-  // Read the new-group behavior for any AI engine — local now also supports
-  // fresh-categories / identify-only (clustering into hostname-named groups).
-  // The other behaviors (auto-add / always-add / prompt) imply LLM-style
-  // semantic naming and are no-ops on local; we just fall through to the
-  // existing-only path in that case.
+  // Read the new-group behavior for any AI engine. Local supports ALL of
+  // these now, not just fresh-categories / identify-only: TIDY_FUSION
+  // (modules/ai.mjs) lets the local engine cluster leftover tabs into new
+  // groups too, so "auto-add" / "prompt" / "transient" are no longer
+  // Ollama-only semantics — see the showModal gating (still engine-aware:
+  // Local's existing-group rule growth stays silent per README.md, only
+  // actual new-group creation gets the preview) and the stickiness filter
+  // (fully engine-agnostic) below.
   const newGroupBehavior = aiEngine !== "off" ? getAINewGroupBehavior() : "";
   const isFreshMode = newGroupBehavior === "fresh-categories";
   const isIdentifyOnly = newGroupBehavior === "identify-only";
@@ -272,42 +305,20 @@ export const handleOrganizeClick = async () => {
               pass2 = { assignedToExisting: [], newGroups: [], skipped: [] };
             } else {
               pass2 = await runPass2Ollama(unmatched, rules);
-              // Stickiness for rule-considering modes: don't let the AI
-              // pull a tab OUT of a user-organized group INTO a brand-new
-              // AI-invented category. Reclassifying into an EXISTING group
-              // (assignedToExisting) is still allowed — that's the wand
-              // correcting wrong placement. Fresh / identify-only opt out
-              // of this by design (those modes are full re-orgs).
-              if (pass2.newGroups?.length) {
-                const displaced = [];
-                for (const g of pass2.newGroups) {
-                  const stays = [];
-                  for (const t of g.tabs) {
-                    if (t.currentGroup) displaced.push(t);
-                    else stays.push(t);
-                  }
-                  g.tabs = stays;
-                }
-                pass2.newGroups = pass2.newGroups.filter((g) => g.tabs.length > 0);
-                if (displaced.length > 0) {
-                  console.log(
-                    `${LOG} stickiness: kept ${displaced.length} already-grouped tab(s) in place rather than moving to new AI group(s):`,
-                    displaced.map((t) => `${t.hostname} (in "${t.currentGroup}")`)
-                  );
-                  pass2.skipped = [...(pass2.skipped || []), ...displaced];
-                }
-              }
+              applyStickiness(pass2);
             }
             console.log(`${LOG} Ollama Pass 2 took ${Math.round(performance.now() - t0)}ms`);
           }
         } else {
           // Local engine. Two sub-paths:
           //   - fresh-categories / identify-only: cluster ALL eligible tabs
-          //     into new groups (ignores rules). This is the ONLY Local mode
-          //     that creates new groups.
-          //   - auto-add / transient (or any other value): existing-only fit.
-          //     The dropdown's choice between auto-add vs transient feeds
-          //     getAIExistingBehavior() to decide whether the rule grows.
+          //     into new groups (ignores rules).
+          //   - auto-add / transient (or any other value): existing-group fit
+          //     PLUS clustering leftovers into new groups (TIDY_FUSION, see
+          //     modules/ai.mjs runPass2). The dropdown's choice between
+          //     auto-add vs transient feeds getAIExistingBehavior() to decide
+          //     whether the rule grows, and applyPass2 honors the same pref
+          //     for whether new clusters also become saved rules.
           // Soft cap: very large input sets take real time on the Local engine
           // even with chunking + dedupe. Confirm with the user before running
           // so a 3000-tab workspace doesn't ambush them. Cancellation just
@@ -332,6 +343,7 @@ export const handleOrganizeClick = async () => {
               pass2 = await runPass2Fresh(tabs);
             } else {
               pass2 = await runPass2(unmatched, rules, workspaceId);
+              applyStickiness(pass2);
             }
           }
         }
@@ -358,9 +370,21 @@ export const handleOrganizeClick = async () => {
           //   - Preview Only (identify-only) → always show (it IS the modal mode);
           //     applies to BOTH engines (local Fresh is hostname-named so the
           //     modal lets the user rename / re-assign before applying)
-          //   - Preview + Save Rule / Move + Save Domain → show so user can veto rule mutations
-          //     before they hit the rules table. Ollama-only — those modes imply
-          //     LLM-style semantic naming.
+          //   - Move + Save Domain (existing-group rule growth) → Ollama-only
+          //     veto step, unchanged by TIDY_FUSION. For Local, existingBehavior
+          //     is DERIVED from the same "auto-add" pref as new-group creation
+          //     (see getAIExistingBehavior in rules.mjs) and has always applied
+          //     directly without a preview (documented in README.md) — that's
+          //     existing, reviewed-rule growth, not a new AI decision, so it
+          //     stays silent for Local.
+          //   - Preview + Save Rule → show so the user can veto NEW rule/group
+          //     creation before it hits the rules table. Historically Ollama-only;
+          //     TIDY_FUSION means the local engine can now invent new groups too
+          //     (a genuinely new, unreviewed AI decision, unlike existing-group
+          //     growth above), so it needs the same veto step — but only when
+          //     this run actually produced a new group, so a Local run that only
+          //     did existing-group work still applies directly per the
+          //     documented behavior above.
           //   - Group Once (either) → no modal (it's just a temp move per user)
           //   - Zen Edit Prompt → no modal (Zen handles per-group via its own edit modal)
           //   - Fresh Rebuild → no modal (no rule mutations happen here)
@@ -370,11 +394,15 @@ export const handleOrganizeClick = async () => {
           if (isIdentifyOnly) {
             showModal = true;
             modalReason = "Preview Only";
-          } else if (aiEngine === "ollama" && !isFreshMode && newGroupBehavior !== "prompt") {
+          } else if (!isFreshMode && newGroupBehavior !== "prompt") {
             const existingBehavior = getAIExistingBehavior();
             const flags = [];
-            if (existingBehavior === "always-add") flags.push("Move + Save Domain");
-            if (newGroupBehavior === "auto-add") flags.push("Preview + Save Rule");
+            if (aiEngine === "ollama" && existingBehavior === "always-add") {
+              flags.push("Move + Save Domain");
+            }
+            if (newGroupBehavior === "auto-add" && (aiEngine === "ollama" || pass2.newGroups.length > 0)) {
+              flags.push("Preview + Save Rule");
+            }
             if (flags.length > 0) {
               showModal = true;
               modalReason = flags.join(" + ");
