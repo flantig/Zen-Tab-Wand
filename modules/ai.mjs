@@ -357,15 +357,23 @@ const nameClusterWithTopic = async (members) => {
       .map((l) => l.trim())
       .find((l) => l);
     if (!name || /none|adult content/i.test(name)) return fallback();
+    // Strip wrapping quotes/trailing punctuation BEFORE title-casing, not
+    // after: titleCaseToken capitalizes the first character of each
+    // whitespace/hyphen/apostrophe-delimited segment, so a leading quote
+    // character (the model sometimes wraps its answer in quotes) would
+    // occupy that "first character" slot and the real first letter of the
+    // word would fall into the lower-cased remainder instead
+    // (`"machine learning"` → `machine Learning` if cased first, vs the
+    // correct `Machine Learning` once the quote is gone first).
+    name = name
+      .replace(/^['"`]+|['"`]+$/g, "")
+      .replace(/[.?!,:;]+$/, "");
     // titleCaseToken (not titleCase) — the model's output is typically a
     // multi-word phrase ("machine learning tools"), and titleCase only
     // capitalizes the first character of the whole string, lower-casing
     // every other word. titleCaseToken capitalizes each word/segment,
     // matching how every other naming path in this file titles its output.
-    name = titleCaseToken(name)
-      .replace(/^['"`]+|['"`]+$/g, "")
-      .replace(/[.?!,:;]+$/, "")
-      .slice(0, 24);
+    name = titleCaseToken(name).slice(0, 24);
     return name || fallback();
   } catch (e) {
     console.warn(`${LOG} AI: topic naming failed, hostname fallback:`, e);

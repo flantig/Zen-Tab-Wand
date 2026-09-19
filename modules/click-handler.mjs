@@ -443,7 +443,20 @@ export const handleOrganizeClick = async () => {
               // Treats each kept bucket (new group or existing-target) as a
               // fake rule whose domains are its tabs' hostnames, then runs
               // Phase-3-style classification into one of those names.
-              onAssignToPlanned: async (pendingTabs, keptBuckets) => {
+              // Ollama-only: classifyExistingGroupsBatch always talks to the
+              // Ollama daemon, regardless of which engine produced the plan
+              // being previewed. Before TIDY_FUSION, Local could never reach
+              // this modal outside identify-only (which Local's settings UI
+              // doesn't even offer — see AI_NEW_GROUP_OPTIONS in prefs-ui.mjs),
+              // so this being unconditional was harmless dead code for Local.
+              // Now that Local's default "auto-add" can open this same modal
+              // for a genuine new-group preview, leaving it unconditional
+              // would silently try to reach Ollama for a Local-engine user —
+              // failing quietly (runWithSpinner swallows the rejection) if
+              // Ollama isn't installed/running, or using an engine the user
+              // never selected if it happens to be. Gate it like
+              // onAssignToExisting below: undefined disables the button.
+              onAssignToPlanned: aiEngine === "ollama" ? async (pendingTabs, keptBuckets) => {
                 const host = getOllamaHost();
                 const model = getOllamaModel();
                 const fakeRules = keptBuckets.map((g) => ({
@@ -459,14 +472,16 @@ export const handleOrganizeClick = async () => {
                   else skipped.push(pendingTabs[i]);
                 }
                 return { assignments, skipped };
-              },
+              } : undefined,
               // "Re-assign to existing" — classifies pending tabs against the
               // user's full rules table, regardless of what's currently kept
               // in the modal. Lets the user route a tab into any rule-named
-              // group (e.g., "Dev") that the AI didn't propose this run. The
-              // callback is only provided when rules actually exist — modal
-              // disables the button when undefined.
-              onAssignToExisting: rules.length > 0 ? async (pendingTabs) => {
+              // group (e.g., "Dev") that the AI didn't propose this run.
+              // Ollama-only for the same reason as onAssignToPlanned above —
+              // classifyExistingGroupsBatch is an Ollama call regardless of
+              // aiEngine. The callback is only provided when rules exist AND
+              // the engine is Ollama — modal disables the button when undefined.
+              onAssignToExisting: aiEngine === "ollama" && rules.length > 0 ? async (pendingTabs) => {
                 const host = getOllamaHost();
                 const model = getOllamaModel();
                 const assignmentMap = await classifyExistingGroupsBatch(pendingTabs, rules, host, model);
