@@ -87,12 +87,27 @@ export const CONFIG = {
   // these tabs already failed the strict existing-group bar, so this is a
   // lower bar for "loosely on the same topic" rather than "slam dunk".
   TIDY_LOW: 0.45,
+  // Cosine-similarity bar for TIDY_FUSION's post-clustering fragmentation
+  // merge (modules/dedupe.mjs mergeSimilarClusters — same idea as
+  // ai.mjs's own inline Fresh 3rd-pass centroid merge, FRESH_MERGE_THRESHOLD
+  // — a LOCAL const in ai.mjs, not part of this CONFIG object). Looser than
+  // TIDY_LOW by design, mirroring the gap between Fresh's own two thresholds:
+  // a CENTROID average of an already-clustered group tends to sit closer to
+  // OTHER related clusters' centroids than any single raw pairwise comparison
+  // did, since per-tab noise gets averaged out — so a looser bar on centroids
+  // stays meaningfully selective while catching what TIDY_LOW's single-pass
+  // greedy pairing missed. Kept as its own constant rather than reusing
+  // ai.mjs's FRESH_MERGE_THRESHOLD or this file's NAME_COLLISION_MERGE_THRESHOLD
+  // below — same "don't couple unrelated tuning knobs" reasoning as keeping
+  // NAME_COLLISION_MERGE_THRESHOLD itself distinct from FRESH_MERGE_THRESHOLD.
+  TIDY_MERGE_THRESHOLD: 0.35,
 
   // Cosine-similarity bar for the shared name-collision merge/disambiguate
   // decision (modules/dedupe.mjs), used by TIDY_FUSION, Fresh's safety net,
-  // and Ollama's post-collision check. Distinct from FRESH_MERGE_THRESHOLD
-  // (same initial value, 0.40) because it governs a conceptually different
-  // decision — future tuning of one shouldn't silently move the other.
+  // and Ollama's post-collision check. Distinct from ai.mjs's local
+  // FRESH_MERGE_THRESHOLD (same initial value, 0.40) because it governs a
+  // conceptually different decision — future tuning of one shouldn't
+  // silently move the other.
   NAME_COLLISION_MERGE_THRESHOLD: 0.40,
 
   // Local-AI chunking. When the count of unmatched tabs to embed exceeds the

@@ -42,6 +42,7 @@ import {
   etld1,
   titleCase,
   resolveNameCollisions,
+  mergeSimilarClusters,
 } from "./dedupe.mjs";
 
 // ─── Engine loaders (lazy + cached for the lifetime of the window) ───────────
@@ -498,14 +499,44 @@ export const runPass2 = async (unmatched, rules, workspaceId) => {
       remainder.map((r) => r.embedding),
       CONFIG.TIDY_LOW
     );
-    // Defensive: clusterEmbeddings is expected to partition every index into
-    // exactly one group, but don't assume it — track what it actually covers
-    // so a bad/missing threshold (or any future change to clusterEmbeddings)
-    // degrades to "tab reported as skipped" rather than "tab silently
-    // vanishes from the Pass-2 result" (it would appear in neither
-    // assignedToExisting, newGroups, nor skipped otherwise).
+    // Fragmentation-merge pass (modules/dedupe.mjs mergeSimilarClusters) —
+    // clusterEmbeddings is a single-pass greedy clusterer with no refinement
+    // step, so topically-related tabs can end up split into two-or-more
+    // separate raw clusters (or stranded as unmerged size-1 "loners") purely
+    // from pairing order, even when their overall content is clearly
+    // related. Same fragmentation problem ai.mjs's own runPass2Fresh already
+    // solves with its inline union-find 3rd-pass centroid merge — this gives
+    // TIDY_FUSION the same structure: compute each raw cluster's centroid
+    // (reusing embeddings already on hand, no new embedding calls), then
+    // merge cluster PAIRS whose centroids clear CONFIG.TIDY_MERGE_THRESHOLD
+    // (looser than TIDY_LOW — see that constant's comment for why). Loner
+    // clusters are included as merge candidates too — a tab that didn't pair
+    // with anything at TIDY_LOW may still turn out centroid-similar enough to
+    // another cluster (or another loner) to earn a second chance here, so
+    // this can turn what used to be permanently-skipped singletons into a
+    // real multi-tab group. This runs BEFORE naming and BEFORE the
+    // name-collision dedupe pass further down, which stays a secondary/
+    // residual backstop for same-name-different-content coincidences, not
+    // the primary consolidation mechanism.
+    const rawCentroids = idxGroups.map((idx) =>
+      idx.length > 0 ? l2Normalize(averageVectors(idx.map((k) => remainder[k].embedding))) : null
+    );
+    const mergedGroupings = mergeSimilarClusters(rawCentroids, CONFIG.TIDY_MERGE_THRESHOLD);
+    const consolidatedIdxGroups = mergedGroupings.map((rawGroupIndices) =>
+      rawGroupIndices.flatMap((gi) => idxGroups[gi])
+    );
+    if (consolidatedIdxGroups.length !== idxGroups.length) {
+      console.log(`${LOG} AI: fragmentation merge collapsed ${idxGroups.length} → ${consolidatedIdxGroups.length} raw cluster(s)`);
+    }
+    // Defensive: clusterEmbeddings + the consolidation pass above are
+    // expected to partition every index into exactly one group, but don't
+    // assume it — track what's actually covered so a bad/missing threshold
+    // (or any future change to either step) degrades to "tab reported as
+    // skipped" rather than "tab silently vanishes from the Pass-2 result"
+    // (it would appear in neither assignedToExisting, newGroups, nor skipped
+    // otherwise).
     const covered = new Set();
-    for (const idx of idxGroups) {
+    for (const idx of consolidatedIdxGroups) {
       idx.forEach((k) => covered.add(k));
       if (idx.length < 2) {
         idx.forEach((k) => skipped.push(remainder[k].info));

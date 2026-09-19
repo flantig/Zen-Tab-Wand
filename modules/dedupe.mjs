@@ -1,9 +1,24 @@
-// Zen Tab Wand — cross-engine new-group name-collision dedupe.
+// Zen Tab Wand — cross-engine new-group consolidation.
 //
-// Shared by all three group-creation pathways (Local/TIDY_FUSION, Local Fresh,
-// Ollama): when two proposed new groups end up with the same (or a near-
-// identical) name, decide whether they're actually the SAME topic (merge) or
-// just a naming coincidence (disambiguate with a distinguishing suffix).
+// Two related jobs, both about avoiding needlessly-separate new groups,
+// shared by all three group-creation pathways (Local/TIDY_FUSION, Local
+// Fresh, Ollama):
+//   1. Name-collision dedupe (resolveNameCollisions et al.) — when two
+//      proposed new groups end up with the same (or near-identical) NAME,
+//      decide whether they're actually the SAME topic (merge) or just a
+//      naming coincidence (disambiguate with a distinguishing suffix).
+//   2. Cluster-fragmentation merge (mergeSimilarClusters) — BEFORE naming
+//      even happens, consolidate raw clusters (from a single-pass greedy
+//      clusterer, or any other source) whose CONTENT is similar enough that
+//      they're likely the same topic split apart by clustering noise, same
+//      idea as Fresh's own inline "3rd pass" centroid merge over its
+//      union-find clusters. Unlike (1), this isn't gated on a naming
+//      coincidence at all — it fires whenever two clusters' centroids are
+//      close enough, independent of whatever they'll eventually be named.
+//
+// "Dedupe" stays the right frame for both: (1) avoids two groups for the
+// same topic under different names, (2) avoids two groups for the same
+// topic that never even reached naming as one cluster.
 //
 // This module is a pure, synchronous, zero-I/O leaf: no Services, no
 // ChromeUtils, no DOM, no console logging, no network/engine calls. Every
@@ -203,6 +218,49 @@ export const applyDisambiguationNames = (survivors, existingResolved) => {
     out.push({ ...g, name: candidateName });
   }
   return out;
+};
+
+// ─── Cluster-fragmentation merge ──────────────────────────────────────────────
+// Generalizes the union-find + centroid-similarity "3rd pass" ai.mjs's
+// runPass2Fresh already does inline (merge cluster pairs whose CENTROIDS —
+// not raw member-to-member pairs — clear a threshold, catching
+// over-fragmentation a single-pass/pairwise clusterer left behind). Not
+// wired into runPass2Fresh itself (its inline version stays as-is — no
+// reason to risk regressing an already-working, already-tested path just to
+// share this), but written generally enough to be reusable there later.
+//
+// Takes CENTROIDS directly (not raw items) and returns groupings of INDICES
+// into that centroid array, mirroring ai.mjs's own clusterEmbeddings return
+// shape — the caller (which knows what each index actually represents, e.g.
+// an index-array of tab indices for TIDY_FUSION) does the actual flattening.
+//
+// A null/invalid centroid at some index never merges with anything (stays
+// its own singleton output group) — same "missing data fails toward the
+// non-destructive choice" rule as decideCollisionAction.
+export const mergeSimilarClusters = (centroids, threshold) => {
+  if (!Array.isArray(centroids) || centroids.length === 0 || typeof threshold !== "number") {
+    return (centroids || []).map((_, i) => [i]);
+  }
+  const n = centroids.length;
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const union = (i, j) => { parent[find(i)] = find(j); };
+  for (let i = 0; i < n; i++) {
+    const a = centroids[i];
+    if (!Array.isArray(a)) continue;
+    for (let j = i + 1; j < n; j++) {
+      const b = centroids[j];
+      if (!Array.isArray(b)) continue;
+      if (cosineSimilarity(a, b) >= threshold) union(i, j);
+    }
+  }
+  const groups = new Map(); // root index -> member indices, insertion order
+  for (let i = 0; i < n; i++) {
+    const root = find(i);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(i);
+  }
+  return [...groups.values()];
 };
 
 /**
