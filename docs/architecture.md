@@ -91,6 +91,8 @@ browser-ui.mjs    browser-hooks.mjs   (browser context)
 prefs-ui.mjs ─── widget.mjs ─── color-picker.mjs / emoji-picker.mjs   (prefs context)
 ```
 
+**Not pictured above** (added for the cross-engine new-group name-collision dedupe — see [module-dedupe.md](module-dedupe.md)): `modules/dedupe.mjs` is a new pure, zero-dependency leaf module, at the same "foundational" level as `config.mjs`. Both `ai.mjs` and `ollama.mjs` import from it (`resolveNameCollisions`, plus the math/naming primitives relocated out of `ai.mjs` and the name-normalization helpers relocated out of `ollama.mjs`). Separately, `ollama.mjs` now also imports `embedBatch` directly from `ai.mjs` — a new cross-import direction between the two engine modules, but not a cycle: `ai.mjs` never imports from `ollama.mjs`. `dedupe.mjs` existing as its own module (rather than one engine importing straight from the other, or duplicating the logic in both) is what keeps that non-cycle possible.
+
 ## The tidy-button click flow
 
 When the user clicks the wand button, `handleOrganizeClick` runs:
@@ -109,9 +111,10 @@ Then, if the AI engine is set to anything other than `"off"`:
 
 10. **setButtonThinking(true)** — start the wand's pulse animation while AI runs
 11. **runPass2** (ai.mjs **or** ollama.mjs) — depends on `ai-engine` pref:
-    - `"local"` → existing-group classification, or Fresh Rebuild clustering when selected
+    - `"local"` → existing-group classification PLUS TIDY_FUSION clustering of leftovers into new groups, or Fresh Rebuild clustering when selected
     - `"ollama"` → unified classify-and-cluster; can also invent new groups
-12. **Preview gate** — Preview Only always opens `showPreviewModal`; Ollama rule-mutating flows also open it before writing rules. With AI title learning enabled, reviewed `T` chips are proposed from actual tab titles as separate title-rule proposals before the modal opens, including an audit of tabs already inside rule-named groups
+    - Both engines run any new-group output through the shared name-collision dedupe (`modules/dedupe.mjs`) before returning
+12. **Preview gate** — Preview Only always opens `showPreviewModal`; Ollama rule-mutating flows also open it before writing rules; Local's plain (non-Fresh) path opens it too, but only when that run actually produced a new group — a run that only did existing-group work still applies directly. With AI title learning enabled, reviewed `T` chips are proposed from actual tab titles as separate title-rule proposals before the modal opens, including an audit of tabs already inside rule-named groups
 13. **applyPass2** — execute the (possibly user-edited) plan: move tabs into existing groups, create new ones, optionally grow rule domains and apply kept title-rule proposals
 14. **fresh-categories cleanup** — if mode is `"fresh-categories"`, dissolve any group that has zero tabs after the rebuild
 

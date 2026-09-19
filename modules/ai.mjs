@@ -31,6 +31,18 @@ import {
 import { getTabTitle, fetchPageSnippet } from "./tabs.mjs";
 import { findExistingGroup, expandIfCollapsed, applyGroupColor, findSafeInsertAnchor } from "./groups.mjs";
 import { showToast } from "./ui-toast.mjs";
+// Math/naming primitives live in dedupe.mjs (relocated from here) so that
+// module can be a standalone leaf both this file and ollama.mjs depend on
+// without a circular import — this file also imports resolveNameCollisions
+// from it below. See docs/module-dedupe.md.
+import {
+  averageVectors,
+  l2Normalize,
+  cosineSimilarity,
+  etld1,
+  titleCase,
+  resolveNameCollisions,
+} from "./dedupe.mjs";
 
 // ─── Engine loaders (lazy + cached for the lifetime of the window) ───────────
 //
@@ -99,40 +111,6 @@ const poolEmbedding = (raw) => {
   return averageVectors(embedding);
 };
 
-const averageVectors = (arrays) => {
-  if (!Array.isArray(arrays) || arrays.length === 0) return null;
-  if (typeof arrays[0] === "number") return arrays; // already flat
-  const len = arrays[0].length;
-  const avg = new Array(len).fill(0);
-  for (const a of arrays) {
-    for (let i = 0; i < len; i++) avg[i] += a[i];
-  }
-  for (let i = 0; i < len; i++) avg[i] /= arrays.length;
-  return avg;
-};
-
-const l2Normalize = (v) => {
-  if (!Array.isArray(v) || v.length === 0) return v;
-  let norm = 0;
-  for (let i = 0; i < v.length; i++) norm += v[i] * v[i];
-  norm = Math.sqrt(norm);
-  if (norm === 0) return v;
-  const out = new Array(v.length);
-  for (let i = 0; i < v.length; i++) out[i] = v[i] / norm;
-  return out;
-};
-
-const cosineSimilarity = (a, b) => {
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return 0;
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    na += a[i] * a[i];
-    nb += b[i] * b[i];
-  }
-  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
-};
-
 // Combine the title with the hostname for the embedding input. The hostname is
 // a strong signal the model often learns (e.g. "amazon.com" hints at shopping
 // even if the page title doesn't contain shopping vocabulary).
@@ -192,7 +170,12 @@ const embed = async (input) => {
 // port closed — recreating loads a fresh engine. Limited to one retry per
 // batch to avoid infinite recreation loops when the engine genuinely won't
 // load.
-const embedBatch = async (inputs, opts = {}) => {
+//
+// Exported for modules/ollama.mjs's post-collision name-dedupe check (see
+// resolveOllamaNameCollisions there): it needs one-off embeddings of a couple
+// of colliding group summaries, and this already fully encapsulates engine
+// loading, batching, and dead-port retry — no reason to build that twice.
+export const embedBatch = async (inputs, opts = {}) => {
   const batchSize = opts.batchSize ?? CONFIG.AI_EMBEDDING_BATCH_SIZE;
   const yieldBetween = !!opts.yieldBetween;
   const out = [];
@@ -508,7 +491,7 @@ export const runPass2 = async (unmatched, rules, workspaceId) => {
   // click visibly did nothing. Remainder clusters use the Tidy bar
   // (CONFIG.TIDY_LOW) and topic-model names; singletons stay skipped.
   // applyPass2 honors the "New AI groups" pref (save-once/prompt/preview).
-  const newGroups = [];
+  const rawNewGroups = [];
   const skipped = [...empty.skipped];
   if (remainder.length >= 2) {
     const idxGroups = clusterEmbeddings(
@@ -530,7 +513,12 @@ export const runPass2 = async (unmatched, rules, workspaceId) => {
       }
       const members = idx.map((k) => remainder[k].info);
       const name = await nameClusterWithTopic(members);
-      newGroups.push({ name, tabs: members });
+      // Stash this cluster's centroid for the cross-engine name-collision
+      // dedupe pass below — reuses the per-tab embeddings already computed
+      // for clustering, so no new embedding calls. `_centroid` is internal
+      // bookkeeping only, stripped before this function returns.
+      const centroid = l2Normalize(averageVectors(idx.map((k) => remainder[k].embedding)));
+      rawNewGroups.push({ name, tabs: members, _centroid: centroid });
       console.log(`${LOG} AI: new cluster "${name}" (${members.length} tab(s))`);
     }
     remainder.forEach((r, k) => {
@@ -538,6 +526,22 @@ export const runPass2 = async (unmatched, rules, workspaceId) => {
     });
   } else {
     remainder.forEach((r) => skipped.push(r.info));
+  }
+
+  // Cross-engine name-collision dedupe (modules/dedupe.mjs) — e.g. two
+  // separate leftover clusters both named "Shopping" by the topic model get
+  // merged (if actually similar in content) or disambiguated (if not) rather
+  // than silently creating two same-named groups. existingNames seeds
+  // disambiguation with the CURRENT rule names so a freshly disambiguated
+  // name (e.g. "Reading (Github)") doesn't collide with one a PAST run
+  // already persisted — dedupe only sees this run's own groups otherwise.
+  const newGroups = resolveNameCollisions(rawNewGroups, {
+    getCentroid: (g) => g._centroid || null,
+    threshold: CONFIG.NAME_COLLISION_MERGE_THRESHOLD,
+    existingNames: rules.map((r) => r?.name).filter(Boolean),
+  }).map(({ _centroid, ...g }) => g);
+  if (newGroups.length !== rawNewGroups.length) {
+    console.log(`${LOG} AI: name-collision dedupe collapsed ${rawNewGroups.length} → ${newGroups.length} new cluster(s)`);
   }
 
   return { assignedToExisting, newGroups, skipped };
@@ -560,16 +564,6 @@ export const runPass2 = async (unmatched, rules, workspaceId) => {
 const FRESH_CLUSTER_THRESHOLD = 0.55; // raw cosine — broader than existing-group matching
 const FRESH_MERGE_THRESHOLD = 0.40;   // 3rd-pass centroid-merge — looser than initial pairing
 const FRESH_MIN_CLUSTER_SIZE = 2;     // singletons demoted to skipped
-
-const etld1 = (hostname) => {
-  if (!hostname) return "";
-  const parts = hostname.split(".");
-  if (parts.length < 2) return hostname;
-  return parts.slice(-2).join(".");
-};
-
-const titleCase = (s) =>
-  s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
 
 const nameClusterFromHostnames = (tabs) => {
   const counts = new Map();
@@ -898,32 +892,35 @@ export const runPass2Fresh = async (tabs) => {
   }
 
   // Demote singletons to skipped; everything else becomes a new group.
+  // Attach each group's centroid (from hostToEmb, already computed above —
+  // no new embedding calls) for the shared name-collision dedupe pass below.
   const rawGroups = [];
   for (const members of clusters.values()) {
     if (members.length < FRESH_MIN_CLUSTER_SIZE) {
       skipped.push(...members);
     } else {
-      rawGroups.push({ name: nameClusterFromSignals(members, snippetByHostname), tabs: members });
+      const embs = members.map((t) => hostToEmb.get(t.hostname)).filter(Boolean);
+      const centroid = embs.length > 0 ? l2Normalize(averageVectors(embs)) : null;
+      rawGroups.push({
+        name: nameClusterFromSignals(members, snippetByHostname),
+        tabs: members,
+        _centroid: centroid,
+      });
     }
   }
 
-  // ── Name-dedupe: if the hostname-naming heuristic produced collisions
-  // (e.g. two separate Google-flavored clusters both named "Google"), merge
-  // them into one. Final safety net beyond the centroid pass.
-  const byName = new Map();
-  const newGroups = [];
-  let nameDedupes = 0;
-  for (const g of rawGroups) {
-    if (byName.has(g.name)) {
-      byName.get(g.name).tabs.push(...g.tabs);
-      nameDedupes++;
-    } else {
-      byName.set(g.name, g);
-      newGroups.push(g);
-    }
-  }
-  if (nameDedupes > 0) {
-    console.log(`${LOG} Local Fresh: deduped ${nameDedupes} duplicate-named cluster(s)`);
+  // ── Name-dedupe (modules/dedupe.mjs): if the hostname-naming heuristic
+  // produced collisions (e.g. two separate Google-flavored clusters both
+  // named "Google"), merge groups that are actually content-similar or
+  // disambiguate ones that just share a name coincidentally. Final safety
+  // net beyond the centroid-merge pass above, using the shared cross-engine
+  // helper instead of Fresh's own naive exact-name match.
+  const newGroups = resolveNameCollisions(rawGroups, {
+    getCentroid: (g) => g._centroid || null,
+    threshold: CONFIG.NAME_COLLISION_MERGE_THRESHOLD,
+  }).map(({ _centroid, ...g }) => g);
+  if (newGroups.length !== rawGroups.length) {
+    console.log(`${LOG} Local Fresh: name-collision dedupe collapsed ${rawGroups.length} → ${newGroups.length} cluster(s)`);
   }
 
   console.log(

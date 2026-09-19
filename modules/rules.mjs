@@ -23,6 +23,37 @@ const keepColor = (value) => {
   return ZEN_COLOR_NAMES.has(c) || isValidHex(c) ? c : null;
 };
 
+// Rules-editor "Matches" pill drag-reorder — validates a rule's optional
+// matchOrder field. Drops any entry whose value isn't in the rule's own
+// (already-cleaned) domains/titleTerms (defensive against stale entries left
+// behind by a since-removed pill) and drops duplicates. Malformed input is
+// silently cleaned, never thrown on — matchOrder is non-critical display
+// metadata, unlike domains/titleTerms which stay functionally required.
+// Returns undefined (not an empty array) when nothing valid survives, so
+// cleanRule can omit the field entirely rather than writing empty scaffolding
+// onto every rule that never used it.
+const cleanMatchOrder = (value, domains, titleTerms) => {
+  if (!Array.isArray(value)) return undefined;
+  const domainSet = new Set(domains);
+  const titleSet = new Set(titleTerms);
+  const seen = new Set();
+  const out = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const type = entry.type;
+    const val = entry.value;
+    if (type !== "domain" && type !== "title") continue;
+    if (typeof val !== "string") continue;
+    const set = type === "domain" ? domainSet : titleSet;
+    if (!set.has(val)) continue;
+    const key = `${type}\x00${val}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ type, value: val });
+  }
+  return out.length > 0 ? out : undefined;
+};
+
 const cleanRule = (r) => {
   const out = {
     name: typeof r?.name === "string" ? r.name.trim() : "",
@@ -37,7 +68,60 @@ const cleanRule = (r) => {
     const icon = r.icon.trim();
     if (icon) out.icon = icon.startsWith("custom:") ? icon.slice(0, 128) : icon.slice(0, 12);
   }
+  // Additive, optional field — a rule that never had a pill dragged has no
+  // matchOrder at all, and cleanRule must not invent one. But an EXISTING
+  // matchOrder must be explicitly handled here (not just left unmentioned),
+  // since cleanRule rebuilds its output from known fields only — an
+  // unhandled matchOrder would otherwise be silently stripped on every
+  // readRulesPref() call, making this load-bearing rather than optional.
+  if (Array.isArray(r?.matchOrder)) {
+    const cleaned = cleanMatchOrder(r.matchOrder, out.domains, out.titleTerms);
+    if (cleaned) out.matchOrder = cleaned;
+  }
   return out;
+};
+
+// Rules-editor "Matches" pill rendering order. If the rule has no
+// matchOrder, falls straight through to today's exact default order
+// (domains then titleTerms) — zero behavior change for existing/legacy
+// rules. Otherwise honors matchOrder, dropping any entry whose value no
+// longer exists in the corresponding array, then appends any domains/
+// titleTerms values not yet present (added by a code path that doesn't know
+// matchOrder exists, e.g. AI rule-growing or the tab right-click "Add to
+// Rule…" submenu) at the end in natural array order.
+export const getOrderedMatches = (rule) => {
+  const domains = Array.isArray(rule?.domains) ? rule.domains : [];
+  const titleTerms = Array.isArray(rule?.titleTerms) ? rule.titleTerms : [];
+  const order = Array.isArray(rule?.matchOrder) ? rule.matchOrder : null;
+  if (!order) {
+    return [
+      ...domains.map((value) => ({ type: "domain", value })),
+      ...titleTerms.map((value) => ({ type: "title", value })),
+    ];
+  }
+  // Mutable pools so a duplicate raw string value (rare, but possible) is
+  // consumed one occurrence at a time rather than every occurrence matching
+  // the same matchOrder entry.
+  const domainPool = [...domains];
+  const titlePool = [...titleTerms];
+  const consumeFrom = (pool, value) => {
+    const idx = pool.indexOf(value);
+    if (idx === -1) return false;
+    pool.splice(idx, 1);
+    return true;
+  };
+  const result = [];
+  for (const entry of order) {
+    if (!entry || (entry.type !== "domain" && entry.type !== "title")) continue;
+    const pool = entry.type === "domain" ? domainPool : titlePool;
+    if (consumeFrom(pool, entry.value)) {
+      result.push({ type: entry.type, value: entry.value });
+    }
+    // else: stale entry referencing a value no longer present — dropped.
+  }
+  for (const value of domainPool) result.push({ type: "domain", value });
+  for (const value of titlePool) result.push({ type: "title", value });
+  return result;
 };
 
 const isRunnableRule = (r) =>
@@ -276,6 +360,21 @@ export const isOllamaWarmupEnabled = () => {
     return Services.prefs.getBoolPref(CONFIG.AI_OLLAMA_WARMUP_PREF, true);
   } catch {
     return true;
+  }
+};
+
+// One-shot consent flag set when the user dismisses the Local engine's
+// resource-cost warning modal (modules/prefs-ui.mjs's maybeShowLocalWarning).
+// Used by Ollama's post-collision name-dedupe check (modules/ollama.mjs) as a
+// consent gate before it's allowed to load the Local embedding engine for a
+// one-off similarity check: an Ollama-only user has never seen or
+// acknowledged that warning, so silently loading Firefox's ML model as a
+// side effect of a dedupe check would bypass that consent flow.
+export const isLocalAIAcknowledged = () => {
+  try {
+    return Services.prefs.getBoolPref(CONFIG.LOCAL_ACKNOWLEDGED_PREF, false);
+  } catch {
+    return false;
   }
 };
 

@@ -24,6 +24,8 @@ All read/write access to the rules pref + the file fallback. Cleans malformed in
 | `isOllamaWarmupEnabled()` | bool | Whether to preload + keep the model warm. |
 | `getAIExistingBehavior()` | `"always-add" \| "transient"` | What to do when AI moves a tab into an existing rule-matched group. |
 | `getAINewGroupBehavior()` | string | One of: `"auto-add"`, `"transient"`, `"prompt"`, `"fresh-categories"`, `"identify-only"`. |
+| `isLocalAIAcknowledged()` | bool | Whether the user has dismissed the Local engine's resource-cost warning modal. Used as a consent gate by Ollama's post-collision name-dedupe check (`modules/ollama.mjs`) before it's allowed to load the Local embedding engine for a one-off similarity check. |
+| `getOrderedMatches(rule)` | `{type: "domain"\|"title", value: string}[]` | Rules-editor "Matches" pill rendering order — honors the rule's optional `matchOrder` (see below), falling straight through to today's default order (domains then titleTerms) when absent. |
 
 ## Rule shape
 
@@ -34,11 +36,17 @@ All read/write access to the rules pref + the file fallback. Cleans malformed in
   titleTerms: ["schedule"], // optional — case-insensitive substring matches
   color: "blue",   // optional — Zen palette name OR hex like "#abc"
   color2: "#8cf",  // optional — second color for a gradient
-  icon: "📅"       // optional — plain-text icon or custom:<id>
+  icon: "📅",      // optional — plain-text icon or custom:<id>
+  matchOrder: [    // optional — free interleave display order for the
+    { type: "title", value: "schedule" },           // "Matches" pills in
+    { type: "domain", value: "calendar.google.com" }, // the settings editor
+  ],
 }
 ```
 
 `domains` and `titleTerms` are both optional at the JSON boundary, but a runnable rule needs a name plus at least one domain or title term. `sanitizeRules` is permissive on `color` and `color2`: accepts both a Zen palette name and a hex value. Anything else gets dropped. Plain emoji/text icons are capped to 12 characters; custom icon references are capped to 128 characters.
+
+`matchOrder` is additive and lazily created — it exists ONLY on a rule where the user has dragged a pill to reorder it at least once (set unconditionally by `widget.mjs`'s pill-drop handler; pill add/remove only *sync* an already-existing `matchOrder`, never create one). It is display metadata only: `domains`/`titleTerms` remain the untouched source of truth for match-testing (`pass1.mjs`), rule-growing (`browser-hooks.mjs`, `ai.mjs`, `ollama.mjs`), and prompt-building (`ollama-prompts.mjs`) — none of those call sites know or care that `matchOrder` exists. `cleanRule` validates it (drops entries referencing a value no longer in `domains`/`titleTerms`, drops duplicates) but never throws on malformed input, unlike `domains`/`titleTerms` which stay functionally required. See [module-widget.md](module-widget.md) for the drag mechanics.
 
 The built-in defaults intentionally stay small and only seed fresh installs or fallback loads: Calendar, AI Tools, Dev, Shopping, Social, Music, and Search. Once a user has a rules pref, default changes do not overwrite it.
 

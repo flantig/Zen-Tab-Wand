@@ -13,8 +13,8 @@
 // file is just the orchestration of "send N prompts and merge their results
 // into the shape applyPass2 expects".
 
-import { LOG } from "./config.mjs";
-import { getOllamaHost, getOllamaModel } from "./rules.mjs";
+import { CONFIG, LOG } from "./config.mjs";
+import { getOllamaHost, getOllamaModel, isLocalAIAcknowledged } from "./rules.mjs";
 import { fetchPageSnippet } from "./tabs.mjs";
 import { showToast } from "./ui-toast.mjs";
 import { ollamaGenerateJson } from "./ollama-transport.mjs";
@@ -26,6 +26,12 @@ import {
   buildMergePrompt,
   buildTitleTermPrompt,
 } from "./ollama-prompts.mjs";
+import { findNameCollisionBuckets, resolveNameCollisions } from "./dedupe.mjs";
+// New cross-import direction (not a cycle — ai.mjs never imports from
+// ollama.mjs): resolveOllamaNameCollisions below needs one-off embeddings of
+// colliding group summaries, and embedBatch already fully encapsulates
+// engine loading, batching, and dead-port retry.
+import { embedBatch } from "./ai.mjs";
 
 // Re-export the transport surface that callers outside this module still need
 // (click-handler imports normalizeOllamaHost / checkOllamaReady / warmupOllama /
@@ -450,8 +456,10 @@ export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
       console.warn(`${LOG} Ollama merge-pass errored — keeping un-merged groups:`, e);
     }
   }
-  // 3rd phase — fuzzy name dedupe (catches what the LLM merge missed).
-  newGroups = dedupeSimilarNewGroups(newGroups);
+  // 3rd phase — content-aware name-collision dedupe (catches what the LLM
+  // merge missed; see resolveOllamaNameCollisions above). Passing `rules`
+  // seeds disambiguation with the current rule names too.
+  newGroups = await resolveOllamaNameCollisions(newGroups, rules);
 
   return { assignedToExisting, newGroups, skipped };
 };
@@ -462,61 +470,76 @@ export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
 //   - "Content Unavailable" + "Content Unavailability"     (morphology drift)
 //   - "Communication Apps" + "Communication Tools"         (different suffix)
 //   - "Project Management" + "Project Management Tools"    (substring extra)
-// Strategy: normalize each name to a stem + drop trailing generic words
-// (Tools / Apps / Platforms / ...), then merge groups with the same normalized
-// form. The canonical name kept is whichever group appears FIRST in the input
-// — typically the LLM's "cleaner" first proposal.
-
-const TRAILING_GENERICS = new Set([
-  "tools", "tool", "apps", "app", "platforms", "platform",
-  "services", "service", "sites", "site", "websites", "website",
-  "products", "product", "stuff", "things",
-]);
-
-const lightStem = (word) =>
-  word
-    .replace(/(ability|ibility)$/i, "")
-    .replace(/(able|ible)$/i, "")
-    .replace(/(ation|ization)$/i, "")
-    .replace(/(ing)$/i, "")
-    .replace(/(ies)$/i, "y")
-    .replace(/(s)$/i, "");
-
-const normalizeNameForDedupe = (name) => {
-  const words = String(name || "")
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .filter(Boolean);
-  while (words.length > 1 && TRAILING_GENERICS.has(words[words.length - 1])) {
-    words.pop();
-  }
-  return words.map(lightStem).join(" ");
-};
-
-const dedupeSimilarNewGroups = (newGroups) => {
+//
+// Bucketing collisions (normalize each name to a stem + drop trailing generic
+// words) now lives in modules/dedupe.mjs, shared with TIDY_FUSION and Fresh.
+// What's specific to Ollama here is the CONTENT-similarity check that decides
+// merge vs. disambiguate: this engine doesn't otherwise compute embeddings at
+// all, so unlike TIDY_FUSION/Fresh (which already have per-tab embeddings on
+// hand from clustering) this makes a one-time, consent-gated embedding call
+// ONLY when a collision is actually detected — never speculatively.
+const resolveOllamaNameCollisions = async (newGroups, rules) => {
   if (!newGroups || newGroups.length < 2) return newGroups || [];
-  const byNorm = new Map(); // normalized → index in `out`
-  const out = [];
-  let mergedCount = 0;
-  for (const g of newGroups) {
-    const norm = normalizeNameForDedupe(g.name);
-    if (byNorm.has(norm)) {
-      const existing = out[byNorm.get(norm)];
-      console.log(`${LOG} Ollama 3rd-pass dedupe: "${g.name}" → "${existing.name}" (normalized match: "${norm}")`);
-      existing.tabs.push(...g.tabs);
-      mergedCount++;
-    } else {
-      byNorm.set(norm, out.length);
-      out.push({ ...g });
-    }
+
+  const buckets = findNameCollisionBuckets(newGroups);
+  if (!buckets.some((b) => b.length > 1)) return newGroups; // nothing collides — skip all embedding cost
+
+  const existingNames = (rules || []).map((r) => r?.name).filter(Boolean);
+
+  // Consent gate: an Ollama-only user has never seen or acknowledged the
+  // Local engine's resource-cost warning modal. Silently loading Firefox's
+  // ML model as a side effect of a dedupe check would bypass that consent
+  // flow. Intentionally stricter than "try, then fall back on failure" —
+  // never attempt the embedding at all without consent.
+  if (!isLocalAIAcknowledged()) {
+    console.log(`${LOG} Ollama: name collision detected but Local AI engine not acknowledged — disambiguating without embeddings`);
+    return resolveNameCollisions(newGroups, {
+      getCentroid: () => null,
+      threshold: CONFIG.NAME_COLLISION_MERGE_THRESHOLD,
+      existingNames,
+    });
   }
-  if (mergedCount > 0) {
-    console.log(`${LOG} Ollama 3rd-pass dedupe: collapsed ${mergedCount} similar-named cluster(s) (${newGroups.length} → ${out.length})`);
+
+  // One representative string per COLLIDING group only — singleton buckets
+  // can't collide with anything, so they never need an embedding. Same
+  // "title (hostname)" shape as runPass2Fresh's repInputs pattern, capped at
+  // ~8 tabs per group to keep the embedding input bounded. Each tab's own
+  // contribution is ALSO capped (to ~80 chars) before joining — 8 tabs with
+  // long, unclipped titles (e.g. news/shopping sites with site-name suffixes,
+  // which routinely run 100-200 chars) could otherwise land close to or past
+  // embed()'s MAX_EMBED_INPUT_CHARS (1000) combined limit, silently
+  // truncating off the LAST couple tabs and biasing the embedding toward
+  // just the first few. Per-tab capping keeps the total comfortably under
+  // that limit regardless of tab count or title length.
+  const collidingGroups = buckets.filter((b) => b.length > 1).flat();
+  const repTexts = collidingGroups.map((g) =>
+    (g.tabs || []).slice(0, 8)
+      .map((t) => (t?.title && t?.hostname ? `${t.title} (${t.hostname})` : (t?.title || t?.hostname || "")))
+      .filter(Boolean)
+      .map((s) => s.slice(0, 80))
+      .join(" | ")
+  );
+
+  const centroidByGroup = new Map();
+  try {
+    const embeddings = await embedBatch(repTexts);
+    collidingGroups.forEach((g, i) => {
+      if (embeddings[i]) centroidByGroup.set(g, embeddings[i]);
+    });
+  } catch (e) {
+    // embedBatch/embed already swallow per-tab failures internally and return
+    // null rather than throwing, so this is defense-in-depth for an
+    // unexpected synchronous failure — either way, an empty centroidByGroup
+    // means every lookup below returns null, which decideCollisionAction
+    // already treats as "always disambiguate" (the safe default).
+    console.warn(`${LOG} Ollama: embedding attempt for name-collision dedupe failed — disambiguating without embeddings:`, e);
   }
-  return out;
+
+  return resolveNameCollisions(newGroups, {
+    getCentroid: (g) => centroidByGroup.get(g) || null,
+    threshold: CONFIG.NAME_COLLISION_MERGE_THRESHOLD,
+    existingNames,
+  });
 };
 
 // ─── Merge pass ──────────────────────────────────────────────────────────────
@@ -688,8 +711,13 @@ export const runPass2OllamaFresh = async (allTabs) => {
         console.warn(`${LOG} Ollama merge-pass errored — keeping un-merged groups:`, e);
       }
     }
-    // 3rd phase — fuzzy name dedupe (catches what the LLM merge missed).
-    newGroups = dedupeSimilarNewGroups(newGroups);
+    // 3rd phase — content-aware name-collision dedupe (catches what the LLM
+    // merge missed; see resolveOllamaNameCollisions above). No `rules` arg
+    // here — Fresh Rebuild ignores rules by design (runPass2OllamaFresh has
+    // no rules parameter at all), so there's nothing to seed existingNames
+    // with; matches ai.mjs's runPass2Fresh, which has the same omission for
+    // the same reason.
+    newGroups = await resolveOllamaNameCollisions(newGroups);
     return { assignedToExisting: [], newGroups, skipped };
   } catch (e) {
     console.error(`${LOG} Ollama fresh classification failed:`, e);

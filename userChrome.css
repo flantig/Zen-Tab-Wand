@@ -495,6 +495,28 @@ tab-group.zao-has-custom-icon .tab-group-label::before {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   white-space: nowrap;
   max-width: 100%;
+  /* The pill body itself is the drag handle (no separate grip) — known
+     trade-off: click-dragging pill text to select/copy it no longer works. */
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.zao-pill:active {
+  cursor: grabbing;
+}
+.zao-pill-dragging {
+  opacity: 0.45;
+}
+
+/* Drop indicators for pill reordering — thin colored bar at the left/right
+   edge of the hovered pill while a drag is in progress. Horizontal (not
+   top/bottom like the row-reorder indicator) since pills sit in a wrapping
+   horizontal flex row. */
+.zao-pill.zao-pill-drop-before {
+  box-shadow: 2px 0 0 0 color-mix(in srgb, currentColor 60%, transparent) inset;
+}
+.zao-pill.zao-pill-drop-after {
+  box-shadow: -2px 0 0 0 color-mix(in srgb, currentColor 60%, transparent) inset;
 }
 
 .zao-domain-pill {

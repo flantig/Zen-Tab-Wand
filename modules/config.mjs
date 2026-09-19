@@ -88,6 +88,13 @@ export const CONFIG = {
   // lower bar for "loosely on the same topic" rather than "slam dunk".
   TIDY_LOW: 0.45,
 
+  // Cosine-similarity bar for the shared name-collision merge/disambiguate
+  // decision (modules/dedupe.mjs), used by TIDY_FUSION, Fresh's safety net,
+  // and Ollama's post-collision check. Distinct from FRESH_MERGE_THRESHOLD
+  // (same initial value, 0.40) because it governs a conceptually different
+  // decision — future tuning of one shouldn't silently move the other.
+  NAME_COLLISION_MERGE_THRESHOLD: 0.40,
+
   // Local-AI chunking. When the count of unmatched tabs to embed exceeds the
   // chunking threshold, the engine switches to a more conservative pipeline:
   //   - Hostname dedupe: only one tab per unique hostname is embedded; the

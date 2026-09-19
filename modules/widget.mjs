@@ -10,6 +10,7 @@ import {
   writeRulesPref,
   readSkipDomainsPref,
   writeSkipDomainsPref,
+  getOrderedMatches,
 } from "./rules.mjs";
 import {
   openColorPopover,
@@ -64,7 +65,31 @@ export const buildRulesEditor = (rules) => {
   const renderPill = (rule, key, idx) => {
     const pill = h("span");
     const isTitle = key === "titleTerms";
+    const type = isTitle ? "title" : "domain";
+    const value = rule[key][idx];
     pill.className = `zao-pill ${isTitle ? "zao-title-pill" : "zao-domain-pill"}`;
+
+    // Free drag-and-drop reordering: the pill body itself is the drag
+    // handle (no separate grip glyph). Tagged by (type, value) rather than
+    // idx since render() rebuilds the DOM on every mutation.
+    pill.setAttribute("draggable", "true");
+    pill.dataset.zaoType = type;
+    pill.dataset.zaoValue = value;
+    pill.addEventListener("dragstart", (e) => {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/zao-pill", "1"); // presence-only marker
+      pillDragRule = rule;
+      pillDragType = type;
+      pillDragValue = value;
+      pill.classList.add("zao-pill-dragging");
+      // No custom setDragImage needed (unlike the row grip) — the pill
+      // itself is what's dragged, so the browser's default image is correct.
+    });
+    pill.addEventListener("dragend", () => {
+      pill.classList.remove("zao-pill-dragging");
+      clearPillDropIndicators();
+      resetPillDragState();
+    });
 
     const kind = h("span");
     kind.className = "zao-pill-kind";
@@ -73,7 +98,7 @@ export const buildRulesEditor = (rules) => {
     pill.appendChild(kind);
 
     const text = h("span");
-    text.textContent = rule[key][idx];
+    text.textContent = value;
     pill.appendChild(text);
 
     const remove = h("button");
@@ -82,8 +107,22 @@ export const buildRulesEditor = (rules) => {
     remove.textContent = "×";
     remove.title = isTitle ? "Remove this title match" : "Remove this domain";
     remove.setAttribute("aria-label", remove.title);
+    // The remove button must be excluded from the pill's own drag — but
+    // checking e.target.closest(".zao-pill-remove") inside the pill's
+    // dragstart handler doesn't work: by the time dragstart fires, e.target
+    // already IS the pill (an ancestor of the button), so .closest() can't
+    // detect the button was the original press point. draggable="false" on
+    // the button itself stops the browser's draggable-ancestor resolution
+    // before it ever reaches the pill. The mousedown stopPropagation is
+    // cheap defense-in-depth, not the primary mechanism.
+    remove.setAttribute("draggable", "false");
+    remove.addEventListener("mousedown", (e) => e.stopPropagation());
     remove.addEventListener("click", () => {
       rule[key].splice(idx, 1);
+      if (Array.isArray(rule.matchOrder)) {
+        const mIdx = rule.matchOrder.findIndex((entry) => entry.type === type && entry.value === value);
+        if (mIdx !== -1) rule.matchOrder.splice(mIdx, 1);
+      }
       persist();
       render();
     });
@@ -111,9 +150,25 @@ export const buildRulesEditor = (rules) => {
         if (done) return;
         done = true;
         const val = input.value.trim();
-        if (val) {
+        // Reject a duplicate exactly like the AI-driven rule-growing paths do
+        // (addDomainToRule/addTitleTermsToRule in ai.mjs) — case-sensitive
+        // for domains, case-insensitive for title terms. Without this, two
+        // pills could end up with the identical (type, value) pair, which
+        // the pill-drag code below identifies by (type, value): two such
+        // pills would then be indistinguishable to it, and hovering one to
+        // drop near the other would look like "dropping on itself" (no-op)
+        // instead of reordering them relative to each other.
+        const isDuplicate = val && (isTitle
+          ? (rule.titleTerms || []).some((t) => t.toLocaleLowerCase() === val.toLocaleLowerCase())
+          : (rule.domains || []).includes(val));
+        if (val && !isDuplicate) {
           ensureRuleLists(rule);
           rule[key].push(val);
+          // Sync only an ALREADY-existing matchOrder (lazily created — a
+          // rule that never had a pill dragged never gets one written).
+          if (Array.isArray(rule.matchOrder)) {
+            rule.matchOrder.push({ type: isTitle ? "title" : "domain", value: val });
+          }
           persist();
         }
         render();
@@ -197,6 +252,58 @@ export const buildRulesEditor = (rules) => {
     render();
   };
 
+  // Free pill drag-and-drop reordering within one rule's Matches cell. Same
+  // container-level-listener pattern as the row reorder above, but pill-
+  // scoped: no grip glyph (the pill body itself is the drag handle), full
+  // free interleaving of domain and title-term pills (not two separately-
+  // ordered sublists), confined to the dragged pill's own rule.
+  //
+  // Editor-scope state, alongside dragFromIdx/dragToIdx above. Identifies
+  // pills by (rule, type, value) rather than DOM index, since `render()`
+  // fully rebuilds the DOM on every mutation — a stale index would be wrong
+  // the instant anything else changes.
+  let pillDragRule = null;
+  let pillDragType = null;   // "domain" | "title"
+  let pillDragValue = null;
+  let pillDropType = null;
+  let pillDropValue = null;
+  let pillDropPos = null;    // "before" | "after"
+
+  const clearPillDropIndicators = () => {
+    container.querySelectorAll(".zao-pill-drop-before, .zao-pill-drop-after")
+      .forEach((el) => el.classList.remove("zao-pill-drop-before", "zao-pill-drop-after"));
+  };
+
+  const resetPillDragState = () => {
+    pillDragRule = null;
+    pillDragType = null;
+    pillDragValue = null;
+    pillDropType = null;
+    pillDropValue = null;
+    pillDropPos = null;
+  };
+
+  // Reorders within the rule's FULL free-interleaved match order (not just
+  // within one type's sublist), then writes it back as the new matchOrder —
+  // this is the one place that ever sets `rule.matchOrder` unconditionally,
+  // per the "lazily created" design (a rule that never had a pill dragged
+  // never gets ordering metadata written to it at all).
+  const reorderPill = (rule, srcType, srcValue, targetType, targetValue, pos) => {
+    const order = getOrderedMatches(rule);
+    const srcIdx = order.findIndex((entry) => entry.type === srcType && entry.value === srcValue);
+    if (srcIdx === -1) return;
+    const [moved] = order.splice(srcIdx, 1);
+    const targetIdx = order.findIndex((entry) => entry.type === targetType && entry.value === targetValue);
+    if (targetIdx === -1) {
+      order.push(moved); // target vanished mid-drag — append defensively
+    } else {
+      order.splice(pos === "before" ? targetIdx : targetIdx + 1, 0, moved);
+    }
+    rule.matchOrder = order;
+    persist();
+    render();
+  };
+
   const renderRow = (rule, idx) => {
     const row = h("div");
     row.className = "zao-row";
@@ -241,9 +348,26 @@ export const buildRulesEditor = (rules) => {
 
     const domainsEl = h("div");
     domainsEl.className = "zao-domains";
+    // Tagged with the rule object (not a string id) so the pill-drag
+    // dragover/drop listeners below can reject any drop target outside this
+    // rule's own Matches container by simple reference equality.
+    domainsEl._zaoRule = rule;
     ensureRuleLists(rule);
-    rule.domains.forEach((_, dIdx) => domainsEl.appendChild(renderPill(rule, "domains", dIdx)));
-    rule.titleTerms.forEach((_, tIdx) => domainsEl.appendChild(renderPill(rule, "titleTerms", tIdx)));
+    // One loop over the free-interleaved match order (domains and title
+    // terms mixed, per any existing drag-reorder) instead of two separate
+    // domains-then-titleTerms passes. Consumed-index tracking (not plain
+    // indexOf) so a duplicate raw string value doesn't collapse two pills
+    // onto the same index.
+    const usedDomainIdx = new Set();
+    const usedTitleIdx = new Set();
+    for (const { type, value } of getOrderedMatches(rule)) {
+      const key = type === "domain" ? "domains" : "titleTerms";
+      const usedIdx = type === "domain" ? usedDomainIdx : usedTitleIdx;
+      const pillIdx = rule[key].findIndex((v, i) => v === value && !usedIdx.has(i));
+      if (pillIdx === -1) continue; // shouldn't happen — getOrderedMatches already drops stale entries
+      usedIdx.add(pillIdx);
+      domainsEl.appendChild(renderPill(rule, key, pillIdx));
+    }
     domainsEl.appendChild(renderAddPill(rule, "domains"));
     domainsEl.appendChild(renderAddPill(rule, "titleTerms"));
     row.appendChild(domainsEl);
@@ -322,6 +446,93 @@ export const buildRulesEditor = (rules) => {
       dragToIdx = null;
       if (toIdx === null) return;
       reorderRules(fromIdx, toIdx);
+    });
+  }
+
+  // Container-level dragover/drop for pill reordering — same singleton-
+  // install pattern as the row-reorder listeners above, but a SEPARATE flag
+  // and a separate MIME type ("text/zao-pill") so the two drag features
+  // never interfere with each other on the same container. Not per-
+  // domainsEl listeners: render() fully rebuilds every domainsEl on every
+  // mutation, and per-element listeners would need re-attaching every time.
+  if (!container._zaoContainerPillDragListenersInstalled) {
+    container._zaoContainerPillDragListenersInstalled = true;
+    container.addEventListener("dragover", (e) => {
+      if (!e.dataTransfer.types.includes("text/zao-pill")) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+
+      const domainsEl = e.target.closest(".zao-domains");
+      // Reject any drop target outside the dragged pill's own rule — a
+      // domainsEl not tagged with the SAME rule reference (including no
+      // domainsEl at all, or a domainsEl belonging to a different row).
+      if (!domainsEl || domainsEl._zaoRule !== pillDragRule) {
+        clearPillDropIndicators();
+        pillDropType = pillDropValue = pillDropPos = null;
+        return;
+      }
+
+      const pills = Array.from(domainsEl.querySelectorAll(".zao-pill"));
+      if (pills.length === 0) return;
+
+      // Pills wrap across multiple visual lines (flex-wrap), so a pure
+      // vertical comparison (like the row-level code above) doesn't work —
+      // a pill on the next line could be directly below the cursor despite
+      // being far away in reading order. Nearest-pill-by-2D-distance from
+      // cursor to pill-center naturally handles wrapping instead, since a
+      // pill on the next line is simply farther away.
+      let nearest = null;
+      let nearestDist = Infinity;
+      for (const pill of pills) {
+        const r = pill.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const dx = e.clientX - cx;
+        const dy = e.clientY - cy;
+        const dist = dx * dx + dy * dy;
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearest = { pill, cx };
+        }
+      }
+      if (!nearest) return;
+
+      const targetType = nearest.pill.dataset.zaoType;
+      const targetValue = nearest.pill.dataset.zaoValue;
+      // Hovering the dragged pill itself — no sensible before/after relative
+      // to its own position, so show no indicator rather than a confusing one.
+      if (targetType === pillDragType && targetValue === pillDragValue) {
+        clearPillDropIndicators();
+        pillDropType = pillDropValue = pillDropPos = null;
+        return;
+      }
+
+      const before = e.clientX < nearest.cx;
+      const pos = before ? "before" : "after";
+      if (pillDropType === targetType && pillDropValue === targetValue && pillDropPos === pos) {
+        return; // no DOM update needed
+      }
+      pillDropType = targetType;
+      pillDropValue = targetValue;
+      pillDropPos = pos;
+      clearPillDropIndicators();
+      nearest.pill.classList.toggle("zao-pill-drop-before", before);
+      nearest.pill.classList.toggle("zao-pill-drop-after", !before);
+    });
+    container.addEventListener("drop", (e) => {
+      if (!e.dataTransfer.types.includes("text/zao-pill")) return;
+      e.preventDefault();
+      const rule = pillDragRule;
+      const srcType = pillDragType;
+      const srcValue = pillDragValue;
+      const targetType = pillDropType;
+      const targetValue = pillDropValue;
+      const pos = pillDropPos;
+      clearPillDropIndicators();
+      resetPillDragState();
+      if (!rule || !targetType || !pos) return;
+      if (srcType === targetType && srcValue === targetValue) return; // dropped on itself
+      reorderPill(rule, srcType, srcValue, targetType, targetValue, pos);
     });
   }
 
