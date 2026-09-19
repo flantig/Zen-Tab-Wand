@@ -336,6 +336,19 @@ export const resolveNameCollisions = (groups, { getCentroid, threshold, existing
     // clearing the merge threshold against the blended anchor. This is
     // expected sequential-clustering behavior, not something a within-bucket
     // weighting formula can or should eliminate.
+    //
+    // A separate, distinct limitation (confirmed via a direct test with
+    // controlled centroids, not just reasoned about): every candidate is
+    // compared ONLY against the anchor's running sum, never against any
+    // OTHER candidate in the same bucket. So if B and C are highly similar
+    // to EACH OTHER but neither is similar to anchor A, both independently
+    // fail to merge with A and end up as two SEPARATE disambiguated
+    // survivors (e.g. "Reading (Site-b)" and "Reading (Site-c)") instead of
+    // merging with each other into one group — even though B and C are
+    // plausibly the same real topic. Full pairwise/transitive clustering
+    // within a bucket would catch this, but adds real complexity for a
+    // narrow case (it requires B and C to independently collide on the same
+    // NAME as an unrelated A in the first place); left as a known gap.
     const anchor = { ...bucket[0] };
     const anchorWeight0 = weightOf(bucket[0]);
     const initialCentroid = getCentroid(bucket[0]);
