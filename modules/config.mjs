@@ -91,14 +91,25 @@ export const CONFIG = {
   // merge (modules/dedupe.mjs mergeSimilarClusters — same idea as
   // ai.mjs's own inline Fresh 3rd-pass centroid merge, FRESH_MERGE_THRESHOLD
   // — a LOCAL const in ai.mjs, not part of this CONFIG object). Looser than
-  // TIDY_LOW by design, mirroring the gap between Fresh's own two thresholds:
-  // a CENTROID average of an already-clustered group tends to sit closer to
-  // OTHER related clusters' centroids than any single raw pairwise comparison
-  // did, since per-tab noise gets averaged out — so a looser bar on centroids
-  // stays meaningfully selective while catching what TIDY_LOW's single-pass
-  // greedy pairing missed. Kept as its own constant rather than reusing
-  // ai.mjs's FRESH_MERGE_THRESHOLD or this file's NAME_COLLISION_MERGE_THRESHOLD
-  // below — same "don't couple unrelated tuning knobs" reasoning as keeping
+  // TIDY_LOW, in the same DIRECTION as the gap between Fresh's own two
+  // thresholds (0.55 -> 0.40) though not the same magnitude (0.45 -> 0.35
+  // here is a 0.10 gap, Fresh's is 0.15) — for a MULTI-member raw cluster, a
+  // centroid average tends to sit closer to other related clusters'
+  // centroids than any single raw pairwise comparison did, since per-tab
+  // noise gets averaged out, so a looser bar stays meaningfully selective
+  // while catching what TIDY_LOW's single-pass greedy pairing missed. NOTE
+  // (found by adversarial review): this rationale doesn't hold for a
+  // loner-vs-loner comparison — a size-1 raw cluster's "centroid" IS its
+  // one raw embedding, no averaging happens, so two loners can merge here
+  // purely because 0.35 < TIDY_LOW even though TIDY_LOW already rejected
+  // that same pairwise similarity as not even loosely related. That's
+  // intentional (a loner deserves a second, looser chance to join
+  // something), not a bug, but it's a deliberate 0.10 relaxation of
+  // TIDY_LOW's own calibration for that specific case, not "noise
+  // averaging out" — don't read too much precision into this number. Kept
+  // as its own constant rather than reusing ai.mjs's FRESH_MERGE_THRESHOLD
+  // or this file's NAME_COLLISION_MERGE_THRESHOLD below — same "don't
+  // couple unrelated tuning knobs" reasoning as keeping
   // NAME_COLLISION_MERGE_THRESHOLD itself distinct from FRESH_MERGE_THRESHOLD.
   TIDY_MERGE_THRESHOLD: 0.35,
 
