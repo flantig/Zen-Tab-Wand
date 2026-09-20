@@ -205,6 +205,146 @@ export const dominantBrand = (tabs) => {
   return titleCase(sorted[0][0]);
 };
 
+// Corroborating-evidence gate for a content-similarity-triggered merge (NOT
+// the noCentroidAction no-data fallback — see decideCollisionAction/
+// resolveNameCollisions below for that distinction, which this gate leaves
+// untouched). NAME_COLLISION_MERGE_THRESHOLD sits deliberately BELOW both
+// upstream merge passes (TIDY_MERGE_THRESHOLD/FRESH_MERGE_THRESHOLD), so
+// EVERY content-based merge decision this function makes is, by
+// construction, already in the "compressed, hard-to-discriminate" raw-
+// similarity band real embeddings produce even for unrelated content — a
+// bare name collision plus a similarity score in that band isn't strong
+// enough evidence on its own (confirmed empirically: two genuinely
+// UNRELATED products, "Google Drive - My Drive" and "Notion - Getting
+// Started", independently landed on the same generic hostname-stitch name
+// AND cleared this exact threshold at a real ~0.31 similarity — see
+// modules/config.mjs's NAME_COLLISION_MERGE_THRESHOLD comment for the full
+// repro). Two things were checked (not assumed) before adding this gate:
+//   1. Whether a NAME-SPECIFICITY gate (block merges from the generic
+//      hostname-stitch/intent-label-alone naming tier) would separate the
+//      demonstrated true-positive "Google"-style case from the demonstrated
+//      false-positive Drive/Notion case. It would NOT: both cases collided
+//      on a name from the exact same generic hostname-stitch tier (in fact,
+//      the "true-positive" demo WAS the Drive/Notion data — this codebase
+//      never had a live synthetic test with a real *.google.com-style
+//      subdomain relationship, since that needs real DNS this test
+//      environment can't safely fake). A name-specificity gate would have
+//      either blocked both or neither.
+//   2. Whether the colliding groups' HOSTNAMES share a registrable-domain
+//      family (eTLD+1) DOES separate them: constructed a genuine same-
+//      family case (mail.google.com / docs.google.com, realistic hostname
+//      strings — this module makes no network calls, so no real DNS is
+//      needed to validate the STRING-LEVEL logic) at the SAME measured
+//      ~0.31 similarity as the real Drive/Notion false positive, and
+//      confirmed etld1 correctly reports overlap for the family case and no
+//      overlap for Drive (127.0.0.12) vs Notion (127.0.0.13). This DOES
+//      distinguish the two cases, so it's the gate implemented below.
+//
+// KNOWN FAILURE DIRECTION (found by two independent adversarial reviews,
+// after an earlier version of this comment underclaimed the risk): etld1
+// is a naive "last 2 dot-separated labels" approximation, adequate for its
+// EXISTING cosmetic uses elsewhere (dominantBrand, nameClusterFromHostnames
+// — a wrong answer there just mislabels a brand) but promoted here to a
+// SAFETY GATE whose entire job is preventing false merges, a materially
+// higher-stakes use. Three concrete, DEMONSTRATED false-"overlap" shapes
+// (confirmed by direct testing, not assumed) would silently no-op this
+// gate — NOT make anything WORSE than pre-gate behavior (a defeated gate
+// just falls back to the plain similarity check this function already
+// did), but providing zero added protection for exactly the kind of input
+// this gate exists to catch:
+//   - Bare IP hostnames colliding by coincidental trailing octets (e.g.
+//     "192.168.1.100" and "10.0.1.100" both reduce to "1.100") — IP
+//     addresses have no real subdomain-family semantics at all, so ANY
+//     2-label split of one is meaningless. Excluded below: an IP hostname
+//     only "overlaps" with another IP hostname that's EXACTLY identical.
+//   - Bare single-label hosts (no dot at all — "localhost" being the
+//     overwhelmingly common real case, plausible for this extension's
+//     technical audience running local dev servers/home-lab tools) — two
+//     UNRELATED "localhost" tabs would trivially "share a family" under
+//     the naive heuristic. Excluded below via an explicit denylist.
+//   - Multi-tenant hosting suffixes (github.io, blogspot.com, wordpress.com,
+//     herokuapp.com, and similar) — two unrelated users' pages on the same
+//     free host would trivially "share a family" under the naive
+//     heuristic. Mitigated below via a small, explicitly non-exhaustive
+//     denylist (MULTI_TENANT_SUFFIXES) covering common real platforms.
+//   - Multi-part ccTLD PATTERNS (co.uk, com.au, and similar — a real public
+//     suffix that itself has 2 labels, so etld1's "last 2 labels" answer
+//     for e.g. "bbc.co.uk" is the WRONG, over-broad "co.uk" rather than the
+//     actual registrable domain "bbc.co.uk"). Mitigated below via a small
+//     denylist of the pattern itself (TWO_LABEL_PUBLIC_SUFFIXES) that
+//     falls through to a 3-label split instead of 2 when matched.
+//   None of these mitigations amount to a full Public Suffix List
+//   implementation (out of scope: would need bundling/maintaining a large
+//   external data set this codebase has no precedent for) — they're small,
+//   explicitly non-exhaustive denylists covering the platforms/patterns
+//   most likely to show up in a real user's browsing. A multi-tenant
+//   suffix or ccTLD pattern NOT in either list is a known, accepted
+//   residual gap: the gate simply provides no protection for that specific
+//   pair (same as if this gate didn't exist at all — not a regression).
+const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+// Common multi-tenant/free-hosting suffixes where two DIFFERENT tenants'
+// sites should never count as "the same family" just because they share
+// the platform's own domain. Deliberately small and non-exhaustive (see
+// comment above) — covers the platforms most likely to show up in a real
+// user's browsing, not an attempt at a complete Public Suffix List.
+const MULTI_TENANT_SUFFIXES = new Set([
+  "github.io", "gitlab.io", "netlify.app", "vercel.app", "pages.dev",
+  "herokuapp.com", "onrender.com", "web.app", "firebaseapp.com",
+  "appspot.com", "azurewebsites.net", "workers.dev", "surge.sh",
+  "glitch.me", "repl.co", "blogspot.com", "wordpress.com", "tumblr.com",
+  "wixsite.com", "weebly.com", "squarespace.com", "notion.site",
+]);
+// A small set of common 2-label PUBLIC SUFFIX PATTERNS (not specific
+// domains, unlike MULTI_TENANT_SUFFIXES above) — etld1's naive "last 2
+// labels" split gives a wrong, over-broad answer for these, since the real
+// registrable domain is 3 labels (bbc.co.uk), not 2 (co.uk). Also
+// deliberately small/non-exhaustive (the common ones an English-language
+// user would plausibly encounter) — a genuine full Public Suffix List
+// implementation is out of scope, same reasoning as MULTI_TENANT_SUFFIXES.
+const TWO_LABEL_PUBLIC_SUFFIXES = new Set([
+  "co.uk", "org.uk", "gov.uk", "ac.uk", "co.jp", "co.kr", "co.nz", "co.za",
+  "co.in", "com.au", "com.br", "com.mx", "com.sg",
+]);
+
+// A hostname whose etld1 can never count as meaningful family evidence on
+// its own — either because it's not a real registrable domain at all (bare
+// IP, single-label host) or because it's a shared multi-tenant suffix.
+// Bare IPs/single-label hosts fall through to null (never matches anything
+// via the Set, but the caller still allows an EXACT identical-hostname
+// comparison to count as overlap, which is correct — two tabs on the
+// literal same IP or the literal same "localhost" genuinely ARE the same
+// host, just not evidence of a broader "family").
+const familySignal = (hostname) => {
+  if (!hostname) return null;
+  if (IPV4_RE.test(hostname) || !hostname.includes(".")) return null;
+  const e = etld1(hostname);
+  if (TWO_LABEL_PUBLIC_SUFFIXES.has(e)) {
+    // etld1's 2-label answer is actually a public-suffix pattern (co.uk
+    // etc.), not a registrable domain — use the last 3 labels instead
+    // ("bbc.co.uk") so two DIFFERENT organizations under the same ccTLD
+    // pattern don't count as one family.
+    const parts = hostname.split(".");
+    return parts.length >= 3 ? parts.slice(-3).join(".") : null;
+  }
+  return MULTI_TENANT_SUFFIXES.has(e) ? null : e;
+};
+
+export const etld1FamilyOverlap = (tabsA, tabsB) => {
+  const hostsA = new Set((tabsA || []).map((t) => t?.hostname).filter(Boolean));
+  const familiesA = new Set([...hostsA].map(familySignal).filter(Boolean));
+  for (const t of tabsB || []) {
+    const hostB = t?.hostname;
+    if (!hostB) continue;
+    // Exact-hostname match always counts (genuinely the same host), even
+    // for IPs/single-label hosts that familySignal excludes from broader
+    // family matching.
+    if (hostsA.has(hostB)) return true;
+    const sig = familySignal(hostB);
+    if (sig && familiesA.has(sig)) return true;
+  }
+  return false;
+};
+
 // Fallback chain per colliding entry BEYOND THE FIRST in a bucket: hostname-
 // brand suffix ("Reading (Github)") if that brand exists and isn't itself
 // already taken, else a numeric suffix ("Reading (2)") that keeps counting up
@@ -422,7 +562,20 @@ export const resolveNameCollisions = (groups, { getCentroid, threshold, existing
     for (let i = 1; i < bucket.length; i++) {
       const candidate = bucket[i];
       const candidateCentroid = getCentroid(candidate);
-      const action = decideCollisionAction(anchorSum, candidateCentroid, threshold, noCentroidAction);
+      const rawAction = decideCollisionAction(anchorSum, candidateCentroid, threshold, noCentroidAction);
+      // Corroborating-evidence gate (see etld1FamilyOverlap's own comment
+      // for what was checked before adding this): a merge reached via REAL
+      // content similarity — not the noCentroidAction no-data fallback,
+      // which has no content signal to gate at all and is left untouched —
+      // additionally requires the colliding groups' hostnames to share a
+      // registrable-domain family. `isRealContentMerge` distinguishes the
+      // two paths: it's only true when BOTH sides had an actual centroid
+      // AND cosineSimilarity cleared threshold, never when noCentroidAction
+      // supplied the answer instead.
+      const isRealContentMerge = rawAction === "merge" && Array.isArray(anchorSum) && Array.isArray(candidateCentroid);
+      const action = (isRealContentMerge && !etld1FamilyOverlap(anchor.tabs, candidate.tabs))
+        ? "disambiguate"
+        : rawAction;
       if (action === "merge") {
         anchor.tabs = [...anchor.tabs, ...candidate.tabs];
         if (anchorSum && candidateCentroid) {
