@@ -23,15 +23,9 @@ const keepColor = (value) => {
   return ZEN_COLOR_NAMES.has(c) || isValidHex(c) ? c : null;
 };
 
-// Rules-editor "Matches" pill drag-reorder — validates a rule's optional
-// matchOrder field. Drops any entry whose value isn't in the rule's own
-// (already-cleaned) domains/titleTerms (defensive against stale entries left
-// behind by a since-removed pill) and drops duplicates. Malformed input is
-// silently cleaned, never thrown on — matchOrder is non-critical display
-// metadata, unlike domains/titleTerms which stay functionally required.
-// Returns undefined (not an empty array) when nothing valid survives, so
-// cleanRule can omit the field entirely rather than writing empty scaffolding
-// onto every rule that never used it.
+// Drops matchOrder entries whose value no longer exists in domains/titleTerms
+// (stale pills) and dedupes. Returns undefined (not []) so cleanRule can omit
+// the field entirely for rules that never used it.
 const cleanMatchOrder = (value, domains, titleTerms) => {
   if (!Array.isArray(value)) return undefined;
   const domainSet = new Set(domains);
@@ -68,12 +62,8 @@ const cleanRule = (r) => {
     const icon = r.icon.trim();
     if (icon) out.icon = icon.startsWith("custom:") ? icon.slice(0, 128) : icon.slice(0, 12);
   }
-  // Additive, optional field — a rule that never had a pill dragged has no
-  // matchOrder at all, and cleanRule must not invent one. But an EXISTING
-  // matchOrder must be explicitly handled here (not just left unmentioned),
-  // since cleanRule rebuilds its output from known fields only — an
-  // unhandled matchOrder would otherwise be silently stripped on every
-  // readRulesPref() call, making this load-bearing rather than optional.
+  // cleanRule rebuilds output from known fields only, so matchOrder must be
+  // explicitly copied here or it's silently stripped on every pref read.
   if (Array.isArray(r?.matchOrder)) {
     const cleaned = cleanMatchOrder(r.matchOrder, out.domains, out.titleTerms);
     if (cleaned) out.matchOrder = cleaned;
@@ -81,14 +71,9 @@ const cleanRule = (r) => {
   return out;
 };
 
-// Rules-editor "Matches" pill rendering order. If the rule has no
-// matchOrder, falls straight through to today's exact default order
-// (domains then titleTerms) — zero behavior change for existing/legacy
-// rules. Otherwise honors matchOrder, dropping any entry whose value no
-// longer exists in the corresponding array, then appends any domains/
-// titleTerms values not yet present (added by a code path that doesn't know
-// matchOrder exists, e.g. AI rule-growing or the tab right-click "Add to
-// Rule…" submenu) at the end in natural array order.
+// No matchOrder -> default order (domains then titleTerms), for legacy rules.
+// Otherwise follows matchOrder, then appends any domains/titleTerms not listed
+// in it (e.g. added by AI rule-growing, which doesn't know matchOrder exists).
 export const getOrderedMatches = (rule) => {
   const domains = Array.isArray(rule?.domains) ? rule.domains : [];
   const titleTerms = Array.isArray(rule?.titleTerms) ? rule.titleTerms : [];
@@ -99,9 +84,8 @@ export const getOrderedMatches = (rule) => {
       ...titleTerms.map((value) => ({ type: "title", value })),
     ];
   }
-  // Mutable pools so a duplicate raw string value (rare, but possible) is
-  // consumed one occurrence at a time rather than every occurrence matching
-  // the same matchOrder entry.
+  // Pools are mutable so a duplicate value is consumed one occurrence at a
+  // time, not matched by every occurrence of the same matchOrder entry.
   const domainPool = [...domains];
   const titlePool = [...titleTerms];
   const consumeFrom = (pool, value) => {
@@ -127,24 +111,19 @@ export const getOrderedMatches = (rule) => {
 const isRunnableRule = (r) =>
   r.name.length > 0 && (r.domains.length > 0 || r.titleTerms.length > 0);
 
-// One sanitizer for every rule ingestion path. Keeping import, prefs, and
-// rules.json on this path prevents compatibility fixes from drifting apart.
+// Shared by every ingestion path (pref, file, import) so compatibility fixes
+// don't drift apart between them.
 export const sanitizeRules = (rules, { keepIncomplete = false } = {}) => {
   const cleaned = Array.isArray(rules) ? rules.map(cleanRule) : [];
   return keepIncomplete ? cleaned : cleaned.filter(isRunnableRule);
 };
 
 /**
- * Read the rules pref.
- *
  * @param {Object} [opts]
  * @param {boolean} [opts.keepIncomplete=false]
- *   When true, in-progress rules (empty name or no match terms) are returned
- *   alongside complete ones. The settings widget passes this so a user can
- *   add a blank row, close the browser, and find it still waiting to be
- *   filled in next session. The wand-click pipeline (`loadRules`) uses the
- *   default — incomplete rules are no-ops at apply-time anyway, but keeping
- *   them out of the logs is cleaner.
+ *   When true, in-progress rules (empty name or no match terms) are included
+ *   too — used by the settings widget so a blank row survives a session.
+ *   loadRules() uses the default, since incomplete rules are no-ops anyway.
  */
 export const readRulesPref = ({ keepIncomplete = false } = {}) => {
   try {
@@ -167,9 +146,8 @@ export const writeRulesPref = (rules) => {
   }
 };
 
-// Skip-domain list: hostnames or `*.host` patterns the tidy click never touches.
-// Tabs matching any pattern are ejected from their group and parked at the top
-// of the workspace before Pass 1 runs (see click-handler.mjs).
+// Skip-domain list: hostnames or `*.host` patterns the tidy click never touches
+// (see click-handler.mjs — matching tabs are ejected and parked at the top before Pass 1).
 export const readSkipDomainsPref = () => {
   try {
     const raw = Services.prefs.getStringPref(CONFIG.SKIP_DOMAINS_PREF, "");
@@ -191,10 +169,8 @@ export const writeSkipDomainsPref = (domains) => {
   }
 };
 
-// Collapsed-group persistence. Zen's session manager doesn't save the
-// `collapsed` attribute on tab-groups, so they all come back expanded after
-// a browser restart. We track which group labels were collapsed in a pref
-// and re-apply on TabGroupCreate (session restore).
+// Zen's session manager doesn't persist tab-group `collapsed` state across
+// restarts, so we track it ourselves and re-apply on TabGroupCreate.
 export const readCollapsedGroupsPref = () => {
   try {
     const raw = Services.prefs.getStringPref(CONFIG.COLLAPSED_GROUPS_PREF, "");
@@ -241,9 +217,8 @@ export const validateRules = (data) => {
 };
 
 const loadRulesFromFile = async () => {
-  // Gecko aggressively caches chrome:// fetches across reloads of the running
-  // browser. The ?t=<timestamp> query string busts that cache so iterative edits
-  // to rules.json are picked up without restarting Zen.
+  // Cache-busts Gecko's chrome:// fetch cache so rules.json edits are picked
+  // up without restarting Zen.
   const url = `${CONFIG.RULES_URL}?t=${Date.now()}`;
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -275,10 +250,8 @@ export const isMinimalStyle = () => {
   }
 };
 
-// When ON, the tidy click ejects any tab from a rule-named group if its
-// hostname isn't in that rule's `domains[]`. Off by default — preserves the
-// historical behavior where Pass 1 only moves matching tabs, leaving mismatched
-// tabs where the user (or AI) put them.
+// When ON, ejects tabs from a rule-named group if their hostname isn't in that
+// rule's domains[]. Off by default to preserve legacy behavior (Pass 1 only moves matches).
 export const isStrictRulesEnforced = () => {
   try {
     return Services.prefs.getBoolPref(CONFIG.STRICT_RULES_PREF, false);
@@ -310,8 +283,7 @@ export const getGradientStyle = () => {
   return DEFAULT_GRADIENT_STYLE;
 };
 
-// Which AI engine is selected. Returns one of: "off" | "local" | "ollama".
-// Any unrecognized value (Sine's "None" is the empty string) maps to "off".
+// Returns "off" | "local" | "ollama" — Sine's "None" option stores "" here, which maps to "off".
 export const getAIEngine = () => {
   try {
     const engine = Services.prefs.getStringPref(CONFIG.AI_ENGINE_PREF, "");
@@ -351,10 +323,8 @@ export const getOllamaModel = () => {
   }
 };
 
-// Whether to preload the model at browser start AND keep it warm between
-// classification calls. Default true — most users want low-latency clicks.
-// Turning off saves VRAM when idle but every first click after the model
-// unloads (Ollama default 5min idle) pays a cold-start cost.
+// Default true (low-latency clicks). Off saves idle VRAM, but the first click
+// after Ollama's ~5min idle unload pays a cold-start cost.
 export const isOllamaWarmupEnabled = () => {
   try {
     return Services.prefs.getBoolPref(CONFIG.AI_OLLAMA_WARMUP_PREF, true);
@@ -363,13 +333,9 @@ export const isOllamaWarmupEnabled = () => {
   }
 };
 
-// One-shot consent flag set when the user dismisses the Local engine's
-// resource-cost warning modal (modules/prefs-ui.mjs's maybeShowLocalWarning).
-// Used by Ollama's post-collision name-dedupe check (modules/ollama.mjs) as a
-// consent gate before it's allowed to load the Local embedding engine for a
-// one-off similarity check: an Ollama-only user has never seen or
-// acknowledged that warning, so silently loading Firefox's ML model as a
-// side effect of a dedupe check would bypass that consent flow.
+// Set when the user dismisses maybeShowLocalWarning (prefs-ui.mjs). Gates
+// ollama.mjs's dedupe check from silently loading the Local embedding model
+// for an Ollama-only user who's never seen that warning.
 export const isLocalAIAcknowledged = () => {
   try {
     return Services.prefs.getBoolPref(CONFIG.LOCAL_ACKNOWLEDGED_PREF, false);
@@ -378,13 +344,8 @@ export const isLocalAIAcknowledged = () => {
   }
 };
 
-// User-configurable batch size for the Local-AI chunking path. Larger values
-// = more parallel embedding calls per chunk (faster but heavier on RAM/CPU).
-// Smaller values = gentler on the system but slower overall.
-//
-// Stored as a string pref because Sine's preferences.json schema doesn't have
-// a native int type — we parse + clamp on read so any stray about:config
-// edit can't break the pipeline.
+// Stored as a string pref (Sine's schema has no native int type); parsed and
+// clamped on read so a stray about:config edit can't break the pipeline.
 export const getLocalAIBatchSize = () => {
   try {
     const raw = Services.prefs.getStringPref(
@@ -399,15 +360,10 @@ export const getLocalAIBatchSize = () => {
   }
 };
 
-// What to do when AI assigns a tab to an existing rule-matched group.
-//   "always-add" — append the tab's hostname to that rule's domains (default)
-//   "transient"  — move the tab into the group, but don't touch the rule
-//
-// On the Local engine the existing-behavior row is hidden in settings — the
-// new-group-behavior dropdown drives BOTH decisions instead. Map:
-//   Preview + Save Rule → always-add  (grow the rule)
-//   Group Once → transient   (don't grow)
-//   Fresh     → transient   (Fresh ignores rules; the answer doesn't matter)
+// "always-add" appends the tab's hostname to the matched rule (default);
+// "transient" moves the tab without touching the rule. The Local engine hides
+// this row in settings and derives the answer from new-group-behavior instead
+// (auto-add -> always-add, else transient).
 export const getAIExistingBehavior = () => {
   try {
     if (getAIEngine() === "local") {
@@ -419,10 +375,9 @@ export const getAIExistingBehavior = () => {
   }
 };
 
-// What to do when AI clusters a set of unmatched tabs into a new group.
-//   "auto-add"  — Preview + Save Rule: create the tab-group AND a matching rule (default)
-//   "transient" — create the tab-group but don't add a rule
-//   "prompt"    — create the tab-group and open Zen's edit modal so user can confirm
+// "auto-add" creates the group and a matching rule (default); "transient"
+// creates the group without saving a rule; "prompt" also opens Zen's edit
+// modal to confirm.
 export const getAINewGroupBehavior = () => {
   try {
     return Services.prefs.getStringPref(CONFIG.AI_NEW_GROUP_BEHAVIOR_PREF, "auto-add");

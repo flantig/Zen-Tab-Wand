@@ -1,43 +1,25 @@
 // Zen Tab Wand — cross-engine new-group consolidation.
 //
-// Two related jobs, both about avoiding needlessly-separate new groups,
-// shared by all three group-creation pathways (Local/TIDY_FUSION, Local
-// Fresh, Ollama):
-//   1. Name-collision dedupe (resolveNameCollisions et al.) — when two
-//      proposed new groups end up with the same (or near-identical) NAME,
-//      decide whether they're actually the SAME topic (merge) or just a
-//      naming coincidence (disambiguate with a distinguishing suffix).
-//   2. Cluster-fragmentation merge (mergeSimilarClusters) — BEFORE naming
-//      even happens, consolidate raw clusters (from a single-pass greedy
-//      clusterer, or any other source) whose CONTENT is similar enough that
-//      they're likely the same topic split apart by clustering noise, same
-//      idea as Fresh's own inline "3rd pass" centroid merge over its
-//      union-find clusters. Unlike (1), this isn't gated on a naming
-//      coincidence at all — it fires whenever two clusters' centroids are
-//      close enough, independent of whatever they'll eventually be named.
+// Two jobs shared by all three group-creation pathways (Local/TIDY_FUSION,
+// Local Fresh, Ollama):
+//   1. Name-collision dedupe (resolveNameCollisions et al.) — two proposed
+//      groups with the same/near-identical name: merge (same topic) or
+//      disambiguate (naming coincidence).
+//   2. Cluster-fragmentation merge (mergeSimilarClusters) — before naming,
+//      consolidate raw clusters whose CENTROIDS are close enough, independent
+//      of what they'll eventually be named (same idea as Fresh's own inline
+//      3rd-pass centroid merge over its union-find clusters).
 //
-// "Dedupe" stays the right frame for both: (1) avoids two groups for the
-// same topic under different names, (2) avoids two groups for the same
-// topic that never even reached naming as one cluster.
+// Pure, synchronous, zero-I/O: no Services/ChromeUtils/DOM/console/network.
+// Every caller supplies its own `getCentroid` accessor; this module never
+// computes an embedding itself, which keeps it plain-Node-testable and keeps
+// "is this worth an embedding call" a caller decision (e.g. Ollama's
+// consent-gated, only-on-collision embedding attempt).
 //
-// This module is a pure, synchronous, zero-I/O leaf: no Services, no
-// ChromeUtils, no DOM, no console logging, no network/engine calls. Every
-// caller supplies its own `getCentroid` accessor — this module never computes
-// or fetches an embedding itself. That keeps it trivially unit-testable under
-// plain Node (see the verification harness) and keeps the decision of
-// "is it worth the cost of an embedding call" entirely with the caller (e.g.
-// Ollama's consent-gated, only-on-actual-collision embedding attempt).
-//
-// Relocated here (not duplicated) from modules/ai.mjs: averageVectors,
-// l2Normalize, cosineSimilarity, etld1, titleCase — every existing internal
-// call site in ai.mjs keeps working unchanged via import, since the bare
-// identifier names are unchanged. Relocating (rather than exporting in place
-// and having this module import FROM ai.mjs) avoids a circular import, since
-// ai.mjs also needs to import resolveNameCollisions back from here.
-//
-// Relocated here (not duplicated) from modules/ollama.mjs: normalizeNameForDedupe,
-// TRAILING_GENERICS, lightStem — this normalization logic now has three
-// consumers (TIDY_FUSION, Fresh, Ollama) instead of one.
+// averageVectors/l2Normalize/cosineSimilarity/etld1/titleCase are relocated
+// (not duplicated) from ai.mjs, and normalizeNameForDedupe/TRAILING_GENERICS/
+// lightStem from ollama.mjs, both to avoid a circular import (ai.mjs imports
+// resolveNameCollisions back from here).
 
 // ─── Math helpers (relocated from ai.mjs) ────────────────────────────────────
 
@@ -75,17 +57,11 @@ export const cosineSimilarity = (a, b) => {
   return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
 };
 
-// Internal-only vector helpers for resolveNameCollisions' weighted running
-// centroid sum (see there for why this is a sum, not a repeated average).
-// Not exported — averageVectors/l2Normalize above remain the public API for
-// computing a single group's own centroid from its member embeddings.
+// Not exported — averageVectors/l2Normalize remain the public API for a single group's centroid.
 const scaleVector = (v, k) => v.map((x) => x * k);
 const addVectors = (a, b) => a.map((x, i) => x + b[i]);
 
-// How much weight a group's centroid should carry when merging into another
-// (by tab count — a group representing more tabs should pull the combined
-// direction proportionally more). Falls back to 1 for a missing/empty tabs
-// array so a malformed group can't collapse the running sum to zero weight.
+// Falls back to 1 for a missing/empty tabs array so a malformed group can't zero out the running sum.
 const weightOf = (group) =>
   (Array.isArray(group?.tabs) && group.tabs.length > 0) ? group.tabs.length : 1;
 
@@ -102,15 +78,8 @@ export const titleCase = (s) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
 
 // ─── Name normalization (relocated from ollama.mjs) ──────────────────────────
-// Catches near-identical names a naming heuristic (LLM or hostname-stitch)
-// produced separately for what's really the same topic. Symptoms seen in the
-// wild that motivated this (originally in ollama.mjs's merge/dedupe pass):
-//   - "Content Unavailable" + "Content Unavailability"     (morphology drift)
-//   - "Communication Apps" + "Communication Tools"         (different suffix)
-//   - "Project Management" + "Project Management Tools"    (substring extra)
-// Strategy: normalize each name to a stem + drop trailing generic words
-// (Tools / Apps / Platforms / ...), then bucket groups with the same
-// normalized form as name-collision candidates.
+// Stems each word and drops trailing generic words (Tools/Apps/Platforms/...)
+// so e.g. "Communication Apps" and "Communication Tools" bucket together.
 
 export const TRAILING_GENERICS = new Set([
   "tools", "tool", "apps", "app", "platforms", "platform",
@@ -143,12 +112,8 @@ export const normalizeNameForDedupe = (name) => {
 
 // ─── Collision detection ──────────────────────────────────────────────────────
 
-// Bucket `{name, tabs}[]` groups by normalizeNameForDedupe(name). Returns an
-// array of buckets (each an array of the original group objects, first-seen
-// order preserved both across and within buckets). A bucket of length 1 means
-// no collision — every caller should skip real work when every bucket it gets
-// back is a singleton (see the "skip all embedding cost" short-circuit Ollama
-// uses this for).
+// Buckets by normalizeNameForDedupe(name); a length-1 bucket means no collision
+// (callers use this to skip embedding cost entirely when nothing collides).
 export const findNameCollisionBuckets = (groups) => {
   const order = [];
   const indexByNorm = new Map();
@@ -164,34 +129,16 @@ export const findNameCollisionBuckets = (groups) => {
   return order;
 };
 
-// Merge-vs-disambiguate arbiter for one colliding pair.
-//
-// A missing/invalid centroid on either side skips the content check entirely
-// and falls back to `noCentroidAction` — but that fallback means two
-// different things depending on WHY the centroid is missing, and callers
-// must pick the one that actually matches their situation:
-//   - "disambiguate" (the default) — a GENUINE failure: consent was given
-//     and an embedding was attempted but came back missing/invalid. Fail
-//     toward the non-destructive choice, never toward merging unrelated
-//     tabs. This is the only behavior Local/Fresh ever see, and Ollama's own
-//     genuine-embedding-failure path keeps it too — validated correct by
-//     prior bug-bash testing, must not regress.
-//   - "merge" — a DELIBERATE POLICY STATE: no centroid was ever attempted at
-//     all (e.g. Ollama's no-Local-AI-consent path), not a failure. Content
-//     similarity simply isn't available to decide with, so this restores the
-//     historical (pre-dedupe.mjs) behavior of merging unconditionally on a
-//     name collision alone — a real regression fix, since treating "never
-//     attempted" the same as "attempted and failed" silently disabled
-//     Ollama's dedupe for the common no-consent case (see
-//     resolveOllamaNameCollisions in modules/ollama.mjs).
+// noCentroidAction distinguishes WHY a centroid is missing: "disambiguate" (default) is a
+// genuine embedding failure — fail non-destructively. "merge" is a deliberate policy state
+// (no embedding was ever attempted, e.g. Ollama's no-consent path) — merge on the name
+// collision alone, matching this module's pre-existing behavior for that case.
 export const decideCollisionAction = (centroidA, centroidB, threshold, noCentroidAction = "disambiguate") => {
   if (!Array.isArray(centroidA) || !Array.isArray(centroidB)) return noCentroidAction;
   return cosineSimilarity(centroidA, centroidB) >= threshold ? "merge" : "disambiguate";
 };
 
-// Majority-vote brand across a cluster's tabs, for disambiguation naming
-// (e.g. two colliding "Reading" clusters → "Reading (Github)"). Same
-// etld1-majority + titleCase pattern as ai.mjs's nameClusterFromHostnames.
+// Majority-vote brand across a cluster's tabs, for disambiguation naming (e.g. "Reading (Github)").
 export const dominantBrand = (tabs) => {
   const counts = new Map();
   for (const t of tabs || []) {
@@ -205,88 +152,19 @@ export const dominantBrand = (tabs) => {
   return titleCase(sorted[0][0]);
 };
 
-// Corroborating-evidence gate for a content-similarity-triggered merge (NOT
-// the noCentroidAction no-data fallback — see decideCollisionAction/
-// resolveNameCollisions below for that distinction, which this gate leaves
-// untouched). NAME_COLLISION_MERGE_THRESHOLD sits deliberately BELOW both
-// upstream merge passes (TIDY_MERGE_THRESHOLD/FRESH_MERGE_THRESHOLD), so
-// EVERY content-based merge decision this function makes is, by
-// construction, already in the "compressed, hard-to-discriminate" raw-
-// similarity band real embeddings produce even for unrelated content — a
-// bare name collision plus a similarity score in that band isn't strong
-// enough evidence on its own (confirmed empirically: two genuinely
-// UNRELATED products, "Google Drive - My Drive" and "Notion - Getting
-// Started", independently landed on the same generic hostname-stitch name
-// AND cleared this exact threshold at a real ~0.31 similarity — see
-// modules/config.mjs's NAME_COLLISION_MERGE_THRESHOLD comment for the full
-// repro). Two things were checked (not assumed) before adding this gate:
-//   1. Whether a NAME-SPECIFICITY gate (block merges from the generic
-//      hostname-stitch/intent-label-alone naming tier) would separate the
-//      demonstrated true-positive "Google"-style case from the demonstrated
-//      false-positive Drive/Notion case. It would NOT: both cases collided
-//      on a name from the exact same generic hostname-stitch tier (in fact,
-//      the "true-positive" demo WAS the Drive/Notion data — this codebase
-//      never had a live synthetic test with a real *.google.com-style
-//      subdomain relationship, since that needs real DNS this test
-//      environment can't safely fake). A name-specificity gate would have
-//      either blocked both or neither.
-//   2. Whether the colliding groups' HOSTNAMES share a registrable-domain
-//      family (eTLD+1) DOES separate them: constructed a genuine same-
-//      family case (mail.google.com / docs.google.com, realistic hostname
-//      strings — this module makes no network calls, so no real DNS is
-//      needed to validate the STRING-LEVEL logic) at the SAME measured
-//      ~0.31 similarity as the real Drive/Notion false positive, and
-//      confirmed etld1 correctly reports overlap for the family case and no
-//      overlap for Drive (127.0.0.12) vs Notion (127.0.0.13). This DOES
-//      distinguish the two cases, so it's the gate implemented below.
-//
-// KNOWN FAILURE DIRECTION (found by two independent adversarial reviews,
-// after an earlier version of this comment underclaimed the risk): etld1
-// is a naive "last 2 dot-separated labels" approximation, adequate for its
-// EXISTING cosmetic uses elsewhere (dominantBrand, nameClusterFromHostnames
-// — a wrong answer there just mislabels a brand) but promoted here to a
-// SAFETY GATE whose entire job is preventing false merges, a materially
-// higher-stakes use. Three concrete, DEMONSTRATED false-"overlap" shapes
-// (confirmed by direct testing, not assumed) would silently no-op this
-// gate — NOT make anything WORSE than pre-gate behavior (a defeated gate
-// just falls back to the plain similarity check this function already
-// did), but providing zero added protection for exactly the kind of input
-// this gate exists to catch:
-//   - Bare IP hostnames colliding by coincidental trailing octets (e.g.
-//     "192.168.1.100" and "10.0.1.100" both reduce to "1.100") — IP
-//     addresses have no real subdomain-family semantics at all, so ANY
-//     2-label split of one is meaningless. Excluded below: an IP hostname
-//     only "overlaps" with another IP hostname that's EXACTLY identical.
-//   - Bare single-label hosts (no dot at all — "localhost" being the
-//     overwhelmingly common real case, plausible for this extension's
-//     technical audience running local dev servers/home-lab tools) — two
-//     UNRELATED "localhost" tabs would trivially "share a family" under
-//     the naive heuristic. Excluded below via an explicit denylist.
-//   - Multi-tenant hosting suffixes (github.io, blogspot.com, wordpress.com,
-//     herokuapp.com, and similar) — two unrelated users' pages on the same
-//     free host would trivially "share a family" under the naive
-//     heuristic. Mitigated below via a small, explicitly non-exhaustive
-//     denylist (MULTI_TENANT_SUFFIXES) covering common real platforms.
-//   - Multi-part ccTLD PATTERNS (co.uk, com.au, and similar — a real public
-//     suffix that itself has 2 labels, so etld1's "last 2 labels" answer
-//     for e.g. "bbc.co.uk" is the WRONG, over-broad "co.uk" rather than the
-//     actual registrable domain "bbc.co.uk"). Mitigated below via a small
-//     denylist of the pattern itself (TWO_LABEL_PUBLIC_SUFFIXES) that
-//     falls through to a 3-label split instead of 2 when matched.
-//   None of these mitigations amount to a full Public Suffix List
-//   implementation (out of scope: would need bundling/maintaining a large
-//   external data set this codebase has no precedent for) — they're small,
-//   explicitly non-exhaustive denylists covering the platforms/patterns
-//   most likely to show up in a real user's browsing. A multi-tenant
-//   suffix or ccTLD pattern NOT in either list is a known, accepted
-//   residual gap: the gate simply provides no protection for that specific
-//   pair (same as if this gate didn't exist at all — not a regression).
+// Corroborating-evidence gate for a REAL content-similarity merge (not the noCentroidAction
+// no-data fallback, which has no content signal to gate). NAME_COLLISION_MERGE_THRESHOLD alone
+// sits in the compressed similarity band real embeddings don't reliably discriminate, so a name
+// collision plus a similarity score in that band isn't sufficient evidence — also requiring the
+// two groups' hostnames to share a registrable-domain family is. etld1's naive 2-label split is
+// hardened below against known false-"overlap" shapes it would otherwise report: bare IPs and
+// single-label hosts (e.g. "localhost") only count via an exact hostname match, never a partial
+// split; MULTI_TENANT_SUFFIXES excludes shared free-hosting domains (github.io, wordpress.com,
+// etc.) where unrelated tenants would otherwise "share a family"; TWO_LABEL_PUBLIC_SUFFIXES
+// handles ccTLD patterns (co.uk etc.) where etld1's 2-label answer is the suffix itself, not the
+// real registrable domain. None of this is a full Public Suffix List — a suffix/pattern not in
+// either (deliberately small, non-exhaustive) denylist is a known residual gap, not a regression.
 const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-// Common multi-tenant/free-hosting suffixes where two DIFFERENT tenants'
-// sites should never count as "the same family" just because they share
-// the platform's own domain. Deliberately small and non-exhaustive (see
-// comment above) — covers the platforms most likely to show up in a real
-// user's browsing, not an attempt at a complete Public Suffix List.
 const MULTI_TENANT_SUFFIXES = new Set([
   "github.io", "gitlab.io", "netlify.app", "vercel.app", "pages.dev",
   "herokuapp.com", "onrender.com", "web.app", "firebaseapp.com",
@@ -294,35 +172,16 @@ const MULTI_TENANT_SUFFIXES = new Set([
   "glitch.me", "repl.co", "blogspot.com", "wordpress.com", "tumblr.com",
   "wixsite.com", "weebly.com", "squarespace.com", "notion.site",
 ]);
-// A small set of common 2-label PUBLIC SUFFIX PATTERNS (not specific
-// domains, unlike MULTI_TENANT_SUFFIXES above) — etld1's naive "last 2
-// labels" split gives a wrong, over-broad answer for these, since the real
-// registrable domain is 3 labels (bbc.co.uk), not 2 (co.uk). Also
-// deliberately small/non-exhaustive (the common ones an English-language
-// user would plausibly encounter) — a genuine full Public Suffix List
-// implementation is out of scope, same reasoning as MULTI_TENANT_SUFFIXES.
 const TWO_LABEL_PUBLIC_SUFFIXES = new Set([
   "co.uk", "org.uk", "gov.uk", "ac.uk", "co.jp", "co.kr", "co.nz", "co.za",
   "co.in", "com.au", "com.br", "com.mx", "com.sg",
 ]);
 
-// A hostname whose etld1 can never count as meaningful family evidence on
-// its own — either because it's not a real registrable domain at all (bare
-// IP, single-label host) or because it's a shared multi-tenant suffix.
-// Bare IPs/single-label hosts fall through to null (never matches anything
-// via the Set, but the caller still allows an EXACT identical-hostname
-// comparison to count as overlap, which is correct — two tabs on the
-// literal same IP or the literal same "localhost" genuinely ARE the same
-// host, just not evidence of a broader "family").
 const familySignal = (hostname) => {
   if (!hostname) return null;
   if (IPV4_RE.test(hostname) || !hostname.includes(".")) return null;
   const e = etld1(hostname);
   if (TWO_LABEL_PUBLIC_SUFFIXES.has(e)) {
-    // etld1's 2-label answer is actually a public-suffix pattern (co.uk
-    // etc.), not a registrable domain — use the last 3 labels instead
-    // ("bbc.co.uk") so two DIFFERENT organizations under the same ccTLD
-    // pattern don't count as one family.
     const parts = hostname.split(".");
     return parts.length >= 3 ? parts.slice(-3).join(".") : null;
   }
@@ -335,21 +194,15 @@ export const etld1FamilyOverlap = (tabsA, tabsB) => {
   for (const t of tabsB || []) {
     const hostB = t?.hostname;
     if (!hostB) continue;
-    // Exact-hostname match always counts (genuinely the same host), even
-    // for IPs/single-label hosts that familySignal excludes from broader
-    // family matching.
-    if (hostsA.has(hostB)) return true;
+    if (hostsA.has(hostB)) return true; // exact match always counts, even for IPs/single-label hosts
     const sig = familySignal(hostB);
     if (sig && familiesA.has(sig)) return true;
   }
   return false;
 };
 
-// Fallback chain per colliding entry BEYOND THE FIRST in a bucket: hostname-
-// brand suffix ("Reading (Github)") if that brand exists and isn't itself
-// already taken, else a numeric suffix ("Reading (2)") that keeps counting up
-// until it finds a name nothing else (in this bucket OR anything already
-// resolved) is using.
+// Per colliding entry beyond the first: hostname-brand suffix ("Reading (Github)") if free,
+// else a numeric suffix ("Reading (2)") counting up until unused (in this bucket or already resolved).
 export const applyDisambiguationNames = (survivors, existingResolved) => {
   const usedNames = new Set((existingResolved || []).map((g) => g?.name));
   const out = [];
@@ -361,8 +214,6 @@ export const applyDisambiguationNames = (survivors, existingResolved) => {
       if (!usedNames.has(withBrand)) candidateName = withBrand;
     }
     if (candidateName === g.name) {
-      // Brand absent, or the brand-suffixed name itself collided — number
-      // starting from the ORIGINAL name, not the failed brand attempt.
       let n = 2;
       let numbered = `${g.name} (${n})`;
       while (usedNames.has(numbered)) {
@@ -378,22 +229,12 @@ export const applyDisambiguationNames = (survivors, existingResolved) => {
 };
 
 // ─── Cluster-fragmentation merge ──────────────────────────────────────────────
-// Generalizes the union-find + centroid-similarity "3rd pass" ai.mjs's
-// runPass2Fresh already does inline (merge cluster pairs whose CENTROIDS —
-// not raw member-to-member pairs — clear a threshold, catching
-// over-fragmentation a single-pass/pairwise clusterer left behind). Not
-// wired into runPass2Fresh itself (its inline version stays as-is — no
-// reason to risk regressing an already-working, already-tested path just to
-// share this), but written generally enough to be reusable there later.
-//
-// Takes CENTROIDS directly (not raw items) and returns groupings of INDICES
-// into that centroid array, mirroring ai.mjs's own clusterEmbeddings return
-// shape — the caller (which knows what each index actually represents, e.g.
-// an index-array of tab indices for TIDY_FUSION) does the actual flattening.
-//
-// A null/invalid centroid at some index never merges with anything (stays
-// its own singleton output group) — same "missing data fails toward the
-// non-destructive choice" rule as decideCollisionAction.
+// Generalizes Fresh's inline union-find + centroid-merge 3rd pass. Takes centroids
+// directly and returns groupings of INDICES (mirrors ai.mjs's clusterEmbeddings
+// shape); the caller does the flattening since only it knows what each index is.
+// Not wired into runPass2Fresh itself — its inline version stays as-is. A null/
+// invalid centroid never merges (stays its own singleton), matching
+// decideCollisionAction's "missing data fails non-destructively" rule.
 export const mergeSimilarClusters = (centroids, threshold) => {
   if (!Array.isArray(centroids) || centroids.length === 0 || typeof threshold !== "number") {
     return (centroids || []).map((_, i) => [i]);
@@ -425,60 +266,27 @@ export const mergeSimilarClusters = (centroids, threshold) => {
  *
  * @param {{name: string, tabs: Array}[]} groups
  * @param {Object} opts
- * @param {(group) => number[]|null} opts.getCentroid — caller-supplied pure
- *   accessor; returning null/undefined/non-array always forces disambiguate
- *   for any comparison involving that group. No embedding calls happen here.
- * @param {number} opts.threshold — cosine-similarity bar for merge vs.
- *   disambiguate (see CONFIG.NAME_COLLISION_MERGE_THRESHOLD).
- * @param {"disambiguate"|"merge"} [opts.noCentroidAction="disambiguate"] —
- *   what to do when getCentroid returns null/invalid for either side of a
- *   comparison. See decideCollisionAction's own doc for the distinction this
- *   exists to make (genuine embedding failure vs. never-attempted-by-policy).
- *   Local/Fresh never pass this (stay on the default). Ollama's no-consent
- *   path passes "merge"; Ollama's genuine-embedding-failure path stays on
- *   the default too.
- *
- *   CALLER CONTRACT for "merge": only pass this when getCentroid returns
- *   null UNIFORMLY for every group being compared in this call (Ollama's
- *   no-consent path: no embedding is ever attempted for ANYONE, by policy).
- *   resolveNameCollisions defends against a MIXED bucket (some real
- *   centroids, some null) internally — a real centroid encountered mid-
- *   bucket gets "promoted" into the running comparison sum so later
- *   candidates are compared against real data instead of cascading through
- *   a permanently-null anchor — but a caller that intentionally mixes real
- *   and missing centroids under "merge" is relying on that internal
- *   defense, not on any guarantee that partial data will be used
- *   optimally; prefer "disambiguate" (the default) for any caller that has
- *   SOME real centroids and wants normal content-similarity behavior.
- * @param {string[]} [opts.existingNames] — already-persisted names (e.g. the
- *   caller's current rule names) to seed disambiguation's "already taken"
- *   set with, so a freshly disambiguated name doesn't collide with a name
- *   from a PAST run — dedupe only sees the groups proposed in THIS run, so
- *   without this seed a name like "Reading (Github)" chosen to disambiguate
- *   one run's collision could independently get re-chosen by a LATER run's
- *   unrelated collision, with nothing here to know the first one is already
- *   in use. Optional and best-effort: this only covers callers that have
- *   their current rules on hand at the time they call this (TIDY_FUSION and
- *   Ollama's unified classifier do; Fresh-mode paths intentionally don't —
- *   Fresh ignores rules by design). It also doesn't cover names already used
- *   by DOM tab-groups that aren't backed by a rule (transient/prompt-mode
- *   groups) — that would need a check against the live DOM, which this
- *   module deliberately never touches (see "pure, synchronous, zero-I/O").
- * @returns {{name: string, tabs: Array}[]} same shape as the input, with
- *   colliding entries merged or renamed. Any extra fields present on input
- *   group objects (e.g. a caller's temporary `_centroid`) ride along
- *   unchanged on entries that don't merge, and are copied — possibly
- *   stale after a merge — onto the merged survivor; callers that attach such
- *   fields are expected to strip them from the result themselves.
+ * @param {(group) => number[]|null} opts.getCentroid — pure accessor; null/invalid forces
+ *   disambiguate for any comparison involving that group. No embedding calls happen here.
+ * @param {number} opts.threshold — cosine-similarity bar (CONFIG.NAME_COLLISION_MERGE_THRESHOLD).
+ * @param {"disambiguate"|"merge"} [opts.noCentroidAction="disambiguate"] — see
+ *   decideCollisionAction. Only pass "merge" when getCentroid returns null UNIFORMLY for every
+ *   group in the call (Ollama's no-consent path). A mixed bucket is defended internally (a real
+ *   centroid found mid-bucket gets promoted into the running comparison, see below), but that's a
+ *   safety net, not a guarantee of optimal use of partial data.
+ * @param {string[]} [opts.existingNames] — already-persisted names (e.g. current rule names) to
+ *   seed disambiguation's "taken" set, so a name chosen this run doesn't collide with a past run's.
+ *   Best-effort: only covers callers with rules on hand (not Fresh, which ignores rules by design),
+ *   and never covers DOM-only tab-group names (this module never touches the live DOM).
+ * @returns {{name: string, tabs: Array}[]} same shape as input, colliding entries merged or
+ *   renamed. Extra fields on input groups (e.g. a caller's `_centroid`) ride along unchanged, or
+ *   are copied (possibly stale) onto a merge survivor — callers should strip them from the result.
  */
 export const resolveNameCollisions = (groups, { getCentroid, threshold, existingNames, noCentroidAction = "disambiguate" }) => {
   const buckets = findNameCollisionBuckets(groups);
 
-  // Pass 1 — merge decisions. These are bucket-local (don't depend on any
-  // OTHER bucket's contents), so every bucket can be walked independently.
-  // Anchors always keep their original name, so the full anchor-name set is
-  // fixed and known as soon as this pass finishes — collect the leftover
-  // (non-merged) survivors per bucket rather than naming them yet.
+  // Pass 1 — bucket-local merge decisions. Anchors keep their original name, so pass 2 can
+  // disambiguate survivors against the complete anchor set.
   const anchors = [];
   const pendingSurvivorGroups = []; // Array<group[]>, one per bucket that had any
   for (const bucket of buckets) {
@@ -486,92 +294,28 @@ export const resolveNameCollisions = (groups, { getCentroid, threshold, existing
       anchors.push(bucket[0]);
       continue;
     }
-    // Walk the bucket: the first entry anchors it. Every subsequent entry
-    // either merges into the anchor (tabs concatenated) or survives to be
-    // disambiguated in pass 2.
-    //
-    // Merged-in centroids are combined as a running WEIGHTED SUM (weighted by
-    // each merged group's tab count) rather than repeatedly re-averaging
-    // PAIRS. This fixes a real equal-weighting bug the earlier pairwise
-    // version had: `l2Normalize(averageVectors([anchorCentroid, candidate]))`
-    // always gives the NEWEST candidate 50% weight against the anchor,
-    // regardless of how many groups the anchor already absorbed — so in a
-    // 3+-way chained merge, the FIRST group's influence on the running
-    // centroid decays with every subsequent merge instead of staying
-    // proportional to its own tab count. The weighted running sum gives each
-    // merged group's centroid a stable, order-independent share of the final
-    // combined direction (cosineSimilarity is scale-invariant, so comparing
-    // against the unnormalized sum vs. a normalized version never changes a
-    // decision — only relative weighting between merged-in groups does).
-    //
-    // What this does NOT fix, because it's not a bug but an inherent property
-    // of any greedy/sequential clustering (the same "order-dependent but fast
-    // and predictable" trade-off ai.mjs's own clusterEmbeddings already makes
-    // deliberately): once B has genuinely merged into A, the combined A+B
-    // identity legitimately differs from A alone, so a THIRD candidate C that
-    // was similar only to original-A (not to the A+B blend) can validly stop
-    // clearing the merge threshold against the blended anchor. This is
-    // expected sequential-clustering behavior, not something a within-bucket
-    // weighting formula can or should eliminate.
-    //
-    // A separate, distinct limitation (confirmed via a direct test with
-    // controlled centroids, not just reasoned about): every candidate is
-    // compared ONLY against the anchor's running sum, never against any
-    // OTHER candidate in the same bucket. So if B and C are highly similar
-    // to EACH OTHER but neither is similar to anchor A, both independently
-    // fail to merge with A and end up as two SEPARATE disambiguated
-    // survivors (e.g. "Reading (Site-b)" and "Reading (Site-c)") instead of
-    // merging with each other into one group — even though B and C are
-    // plausibly the same real topic. Full pairwise/transitive clustering
-    // within a bucket would catch this, but adds real complexity for a
-    // narrow case (it requires B and C to independently collide on the same
-    // NAME as an unrelated A in the first place); left as a known gap.
+    // Merged centroids combine as a running WEIGHTED SUM (by tab count), not repeated pairwise
+    // re-averaging — the latter gives every new candidate 50% weight regardless of how much the
+    // anchor already represents, so a 3+-way chain lets the first group's influence decay with
+    // each merge. This doesn't make greedy/sequential clustering order-independent (an accepted,
+    // inherent trade-off, same as ai.mjs's own clusterEmbeddings) — a candidate compared only
+    // against the anchor's running sum can miss merging with an equally-similar SIBLING candidate
+    // it was never compared against directly (known gap, not fixed here).
     const anchor = { ...bucket[0] };
     const anchorWeight0 = weightOf(bucket[0]);
     const initialCentroid = getCentroid(bucket[0]);
-    // With the default noCentroidAction ("disambiguate"), a null anchorSum
-    // stays null forever: decideCollisionAction never returns "merge" when
-    // either side is missing/invalid, so nothing ever adds to an
-    // already-null running sum, and every candidate correctly survives
-    // un-merged (safe default). With noCentroidAction="merge", the INTENDED
-    // caller contract (Ollama's no-consent path) is that getCentroid
-    // returns null for EVERY group in the call — so anchorSum stays null
-    // throughout, and every candidate hits the same no-centroid fallback,
-    // giving the desired "merge unconditionally on name collision alone."
-    //
-    // That contract isn't enforced by the type system, though, and a bucket
-    // that VIOLATES it (anchor has no centroid, but a LATER candidate does)
-    // used to cascade-merge incorrectly: a null anchorSum forces
-    // noCentroidAction="merge" for every subsequent comparison regardless of
-    // whether THAT candidate has real data — so two later candidates with
-    // genuinely different, mutually-orthogonal real centroids could both
-    // silently merge into the null-anchored group without ever being
-    // compared to each other, or to any real content at all. Confirmed by
-    // two independent adversarial reviews with an identical hand-traced
-    // repro (anchor null, two later real-but-orthogonal candidates). Fixed
-    // below by "promoting" the first real centroid encountered mid-bucket
-    // to become the running sum, so anything AFTER that point gets a real
-    // comparison instead of a blind noCentroidAction default. This is a
-    // no-op for the actual, uniform-null Ollama call (no candidate ever has
-    // real data to promote, so anchorSum simply stays null throughout, same
-    // as before) and never affects the default "disambiguate" path either
-    // (a null anchorSum there means every action is "disambiguate", so the
-    // merge branch below — where promotion happens — is never entered).
+    // noCentroidAction="merge" assumes getCentroid is null for every group in the call, so
+    // anchorSum stays null throughout and every comparison merges unconditionally. If the anchor
+    // itself is null but a LATER candidate has a real centroid, that centroid gets "promoted" into
+    // anchorSum so anything after it is compared against real data instead of being swept in blind.
     let anchorSum = initialCentroid ? scaleVector(initialCentroid, anchorWeight0) : null;
     const survivors = [];
     for (let i = 1; i < bucket.length; i++) {
       const candidate = bucket[i];
       const candidateCentroid = getCentroid(candidate);
       const rawAction = decideCollisionAction(anchorSum, candidateCentroid, threshold, noCentroidAction);
-      // Corroborating-evidence gate (see etld1FamilyOverlap's own comment
-      // for what was checked before adding this): a merge reached via REAL
-      // content similarity — not the noCentroidAction no-data fallback,
-      // which has no content signal to gate at all and is left untouched —
-      // additionally requires the colliding groups' hostnames to share a
-      // registrable-domain family. `isRealContentMerge` distinguishes the
-      // two paths: it's only true when BOTH sides had an actual centroid
-      // AND cosineSimilarity cleared threshold, never when noCentroidAction
-      // supplied the answer instead.
+      // Only gate a merge reached via a REAL cosine-similarity comparison, never one supplied by
+      // the noCentroidAction fallback (which has no content signal to gate).
       const isRealContentMerge = rawAction === "merge" && Array.isArray(anchorSum) && Array.isArray(candidateCentroid);
       const action = (isRealContentMerge && !etld1FamilyOverlap(anchor.tabs, candidate.tabs))
         ? "disambiguate"
@@ -579,17 +323,10 @@ export const resolveNameCollisions = (groups, { getCentroid, threshold, existing
       if (action === "merge") {
         anchor.tabs = [...anchor.tabs, ...candidate.tabs];
         if (anchorSum && candidateCentroid) {
-          // Normal case: both sides have real data — accumulate as usual.
           anchorSum = addVectors(anchorSum, scaleVector(candidateCentroid, weightOf(candidate)));
         } else if (!anchorSum && candidateCentroid) {
-          // Promotion (see note above): the running sum had no real data
-          // yet, but THIS candidate does — start using it, so any LATER
-          // candidate in this bucket gets compared against real content
-          // instead of cascading through another blind noCentroidAction.
-          anchorSum = scaleVector(candidateCentroid, weightOf(candidate));
+          anchorSum = scaleVector(candidateCentroid, weightOf(candidate)); // promotion, see above
         }
-        // else: neither side has real data — nothing to add or promote;
-        // anchorSum stays null (matches the intended uniform-null contract).
       } else {
         survivors.push(candidate);
       }
@@ -600,21 +337,10 @@ export const resolveNameCollisions = (groups, { getCentroid, threshold, existing
 
   if (pendingSurvivorGroups.length === 0) return anchors;
 
-  // Pass 2 — disambiguation naming, against the COMPLETE anchor-name set from
-  // the start (not just whatever's been resolved so far in bucket order),
-  // PLUS any caller-supplied existingNames. Without this two-pass split, a
-  // bucket processed early could disambiguate into a name that a DIFFERENT,
-  // not-yet-processed bucket's untouched singleton was already using (e.g.
-  // one "Reading" collision resolving to "Reading (Github)" while an
-  // unrelated later group is already literally named "Reading (Github)") —
-  // bucket iteration order would then determine whether that collision got
-  // caught, which isn't a real fix.
-  //
-  // `usedNameTracker` is a SEPARATE, growing accumulator from `resolved`: it
-  // includes plain-string existingNames stand-ins purely for uniqueness
-  // checking, which must never leak into the actual returned group list.
+  // Pass 2 — disambiguate against the COMPLETE anchor set (not just what's resolved so far) plus
+  // existingNames, so bucket iteration order can't determine whether a cross-bucket collision is caught.
   const resolved = [...anchors];
-  const usedNameTracker = [...anchors, ...(existingNames || []).map((name) => ({ name }))];
+  const usedNameTracker = [...anchors, ...(existingNames || []).map((name) => ({ name }))]; // string stand-ins, never leak into `resolved`
   for (const survivors of pendingSurvivorGroups) {
     const named = applyDisambiguationNames(survivors, usedNameTracker);
     resolved.push(...named);

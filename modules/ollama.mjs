@@ -1,17 +1,9 @@
 // Zen Tab Wand — Ollama engine orchestrators.
 //
-// Talks to a local Ollama daemon (via modules/ollama-transport.mjs) to do
-// AI-driven Pass 2 sorting. Two flavors:
-//   - Unified classifier: assigns into existing rule-named groups AND invents
-//     new groups for tabs that don't fit. Single call, then a merge pass to
-//     consolidate over-specialized categories.
-//   - Fresh classifier: ignores existing rules entirely, re-clusters every
-//     tab from scratch. Powers the "Fresh Rebuild" and Preview Only flows.
-//
-// All transport (fetch, ping, warmup, JSON-validate) lives in
-// ollama-transport.mjs. All prompt strings live in ollama-prompts.mjs. This
-// file is just the orchestration of "send N prompts and merge their results
-// into the shape applyPass2 expects".
+// Talks to a local Ollama daemon (modules/ollama-transport.mjs) to do
+// AI-driven Pass 2 sorting: a unified classifier (existing + new groups in
+// one call, then a merge pass) and a fresh classifier (ignores rules,
+// re-clusters everything; powers Fresh Rebuild / Preview Only).
 
 import { CONFIG, LOG } from "./config.mjs";
 import { getOllamaHost, getOllamaModel, isLocalAIAcknowledged } from "./rules.mjs";
@@ -27,16 +19,10 @@ import {
   buildTitleTermPrompt,
 } from "./ollama-prompts.mjs";
 import { findNameCollisionBuckets, resolveNameCollisions } from "./dedupe.mjs";
-// New cross-import direction (not a cycle — ai.mjs never imports from
-// ollama.mjs): resolveOllamaNameCollisions below needs one-off embeddings of
-// colliding group summaries, and embedBatch already fully encapsulates
-// engine loading, batching, and dead-port retry.
+// Not a cycle — ai.mjs never imports from ollama.mjs.
 import { embedBatch } from "./ai.mjs";
 
-// Re-export the transport surface that callers outside this module still need
-// (click-handler imports normalizeOllamaHost / checkOllamaReady / warmupOllama /
-// reportOllamaError). Keeps the public API of "the Ollama module" stable even
-// though the implementation is now split.
+// Re-exported so click-handler can import these from here instead of ollama-transport.mjs directly.
 export {
   normalizeOllamaHost,
   checkOllamaReady,
@@ -44,9 +30,7 @@ export {
   reportOllamaError,
 } from "./ollama-transport.mjs";
 
-// Strip common meta-prefixes the model has been observed to echo back from
-// the prompt's instructions. e.g. "New Category: Gaming" → "Gaming".
-// Shared across classifiers — previously duplicated in two places.
+// Strips meta-prefixes the model sometimes echoes back, e.g. "New Category: Gaming" → "Gaming".
 const stripMetaPrefix = (s) => s
   .replace(/^\s*(?:new\s+)?(?:category|label|topic|bucket|group)\s*[:\-–]\s*/i, "")
   .trim();
@@ -268,9 +252,7 @@ export const proposeTitleTermPatches = async (plan, rules, host, model, mode = "
 };
 
 // ─── Classify into existing rules ────────────────────────────────────────────
-// Returns Map<tabIndex, groupName | null>. Throws on transport / parse errors;
-// caller surfaces to the user. Used both directly (re-assign-to-planned in
-// the preview modal) and indirectly via the Ollama Pass 2 driver.
+// Returns Map<tabIndex, groupName | null>. Throws on transport/parse errors — caller must handle.
 
 export const classifyExistingGroupsBatch = async (unmatched, rules, host, model) => {
   if (!unmatched?.length || !rules?.length) return new Map();
@@ -288,9 +270,7 @@ export const classifyExistingGroupsBatch = async (unmatched, rules, host, model)
 
   console.debug(`${LOG} Ollama raw classification:`, parsed);
 
-  // Validate categories — small models occasionally hallucinate names that
-  // weren't in the list. Case-insensitive match to be forgiving of "shopping"
-  // vs "Shopping". Anything still unmatched is dropped to null.
+  // Case-insensitive match; small models occasionally hallucinate names not in the list — those fall back to null.
   const nameByLower = new Map(groupNames.map((n) => [n.toLowerCase(), n]));
   const rejections = [];
   const out = new Map();
@@ -315,9 +295,7 @@ export const classifyExistingGroupsBatch = async (unmatched, rules, host, model)
 };
 
 // ─── Cluster leftover tabs into new groups ───────────────────────────────────
-// Older fallback. The unified classifier replaced this for the main flow, but
-// it's still used when there are no existing rules (no categories to slot
-// into) — the unified prompt has nothing to compare against in that case.
+// Still used when there are no existing rules — the unified prompt has nothing to compare against then.
 
 const clusterUnmatchedNewGroups = async (leftover, host, model) => {
   if (!leftover?.length) return { groups: [], skipped: [] };
@@ -348,27 +326,20 @@ const clusterUnmatchedNewGroups = async (leftover, host, model) => {
 };
 
 // ─── Unified classification ──────────────────────────────────────────────────
-// Single Ollama call that asks the model, for each tab, EITHER an existing
-// rule category OR a new category name OR "skipped". Followed by a merge pass
-// to consolidate. Used when the engine is Ollama and the flow isn't fresh /
-// Preview Only (i.e., auto-add / always-add / transient / prompt modes).
+// Single call: each tab gets an existing category, a new one, or "skipped". Followed by a merge pass.
 
 export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
   if (!unmatched?.length) return { assignedToExisting: [], newGroups: [], skipped: [] };
 
-  // No existing rules → degrades to pure clustering. Use the dedicated cluster
-  // prompt (it's tuned for that case, the unified prompt would have no
-  // categories section to render).
+  // No existing rules → falls back to the dedicated cluster prompt (unified prompt has no categories section to render).
   if (!rules.some((r) => r?.name)) {
     const c = await clusterUnmatchedNewGroups(unmatched, host, model);
     return { assignedToExisting: [], newGroups: c.groups, skipped: c.skipped };
   }
 
-  // Dedup logically-identical tabs (same hostname + title). Two open copies
-  // of costco.com previously got classified independently — leading to
-  // "costco → Shopping" for one and "costco → skipped" for the other in the
-  // same run. We send each unique combo once and replicate the model's
-  // answer back to every original.
+  // Dedup identical tabs (same hostname + title) — otherwise duplicate copies
+  // of the same tab can get classified differently in one run. Answer is
+  // replicated back to every original.
   const dedupKey = (t) => `${t.hostname || ""}\x00${t.title || ""}`;
   const dedupIndexByKey = new Map();
   const deduped = [];
@@ -384,9 +355,7 @@ export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
     console.log(`${LOG} Ollama: deduplicated ${unmatched.length} tabs → ${deduped.length} unique`);
   }
 
-  // Fetch page snippets in parallel. Each is bounded by its own 3s timeout,
-  // and any failure (auth, timeout, non-HTML, no meta tag) returns "" so the
-  // tab just falls back to title-only context — never blocks classification.
+  // Each fetch has its own 3s timeout; any failure returns "" so it falls back to title-only context.
   const t0 = performance.now();
   const snippets = await Promise.all(deduped.map((t) => {
     const url = t.url || "";
@@ -412,7 +381,6 @@ export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
 
   console.debug(`${LOG} Ollama unified classification:`, parsed);
 
-  // Lookup table for canonicalizing an existing rule name (case-insensitive).
   const ruleNameByLower = new Map(
     rules.filter((r) => r?.name).map((r) => [r.name.toLowerCase(), r.name])
   );
@@ -438,8 +406,7 @@ export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
       continue;
     }
 
-    // Brand-new category. Group tabs by case-insensitive key so the model
-    // saying "Gaming" once and "gaming" later still co-clusters.
+    // Group by case-insensitive key so "Gaming" and "gaming" still co-cluster.
     if (!newGroupsByKey.has(lower)) {
       newGroupsByKey.set(lower, { name: raw, tabs: [] });
     }
@@ -456,28 +423,19 @@ export const unifiedClassifyOllama = async (unmatched, rules, host, model) => {
       console.warn(`${LOG} Ollama merge-pass errored — keeping un-merged groups:`, e);
     }
   }
-  // 3rd phase — content-aware name-collision dedupe (catches what the LLM
-  // merge missed; see resolveOllamaNameCollisions above). Passing `rules`
-  // seeds disambiguation with the current rule names too.
+  // Content-aware name-collision dedupe catching what the merge pass missed;
+  // `rules` seeds disambiguation with the current rule names too.
   newGroups = await resolveOllamaNameCollisions(newGroups, rules);
 
   return { assignedToExisting, newGroups, skipped };
 };
 
 // ─── 3rd-phase name-based dedupe ─────────────────────────────────────────────
-// Catches near-identical names the LLM merge pass missed. Symptoms we've seen
-// in the wild that motivated this:
-//   - "Content Unavailable" + "Content Unavailability"     (morphology drift)
-//   - "Communication Apps" + "Communication Tools"         (different suffix)
-//   - "Project Management" + "Project Management Tools"    (substring extra)
-//
-// Bucketing collisions (normalize each name to a stem + drop trailing generic
-// words) now lives in modules/dedupe.mjs, shared with TIDY_FUSION and Fresh.
-// What's specific to Ollama here is the CONTENT-similarity check that decides
-// merge vs. disambiguate: this engine doesn't otherwise compute embeddings at
-// all, so unlike TIDY_FUSION/Fresh (which already have per-tab embeddings on
-// hand from clustering) this makes a one-time, consent-gated embedding call
-// ONLY when a collision is actually detected — never speculatively.
+// Catches near-identical names the merge pass missed (e.g. "Content Unavailable"
+// vs "Content Unavailability"). Bucketing lives in modules/dedupe.mjs, shared
+// with TIDY_FUSION/Fresh; unlike those, this engine has no embeddings on hand,
+// so it makes a one-time, consent-gated embedding call only when a collision
+// is actually detected.
 const resolveOllamaNameCollisions = async (newGroups, rules) => {
   if (!newGroups || newGroups.length < 2) return newGroups || [];
 
@@ -486,23 +444,10 @@ const resolveOllamaNameCollisions = async (newGroups, rules) => {
 
   const existingNames = (rules || []).map((r) => r?.name).filter(Boolean);
 
-  // Consent gate: an Ollama-only user has never seen or acknowledged the
-  // Local engine's resource-cost warning modal. Silently loading Firefox's
-  // ML model as a side effect of a dedupe check would bypass that consent
-  // flow. Intentionally stricter than "try, then fall back on failure" —
-  // never attempt the embedding at all without consent.
-  //
-  // No consent means no centroid was ever ATTEMPTED — a deliberate policy
-  // state, not a failure — so this must NOT fall back to
-  // decideCollisionAction's default "disambiguate" (that's reserved for a
-  // genuine embedding failure, see the embedBatch try/catch below). The
-  // engine this replaced (dedupeSimilarNewGroups) merged unconditionally on
-  // a normalized-name collision with no centroid at all; without
-  // noCentroidAction: "merge" here, this path silently never merges for the
-  // common no-consent case — a real regression, found and fixed via
-  // adversarial review, reproduced with this module's own motivating
-  // example: "Content Unavailable" + "Content Unavailability" stayed two
-  // groups instead of merging into one.
+  // Consent gate: never silently load the Local engine's ML model without the
+  // user having acknowledged its resource-cost warning. No consent means no
+  // centroid was attempted (not a failure), so this merges on name match alone
+  // rather than falling back to decideCollisionAction's "disambiguate" default.
   if (!isLocalAIAcknowledged()) {
     console.log(`${LOG} Ollama: name collision detected but Local AI engine not acknowledged — merging on name match alone (no embeddings attempted)`);
     return resolveNameCollisions(newGroups, {
@@ -513,17 +458,10 @@ const resolveOllamaNameCollisions = async (newGroups, rules) => {
     });
   }
 
-  // One representative string per COLLIDING group only — singleton buckets
-  // can't collide with anything, so they never need an embedding. Same
-  // "title (hostname)" shape as runPass2Fresh's repInputs pattern, capped at
-  // ~8 tabs per group to keep the embedding input bounded. Each tab's own
-  // contribution is ALSO capped (to ~80 chars) before joining — 8 tabs with
-  // long, unclipped titles (e.g. news/shopping sites with site-name suffixes,
-  // which routinely run 100-200 chars) could otherwise land close to or past
-  // embed()'s MAX_EMBED_INPUT_CHARS (1000) combined limit, silently
-  // truncating off the LAST couple tabs and biasing the embedding toward
-  // just the first few. Per-tab capping keeps the total comfortably under
-  // that limit regardless of tab count or title length.
+  // Only colliding groups need embeddings (singletons can't collide). Each
+  // tab's title is capped to ~80 chars before joining — long titles could
+  // otherwise exceed embed()'s MAX_EMBED_INPUT_CHARS and silently truncate,
+  // biasing the embedding toward just the first few tabs.
   const collidingGroups = buckets.filter((b) => b.length > 1).flat();
   const repTexts = collidingGroups.map((g) =>
     (g.tabs || []).slice(0, 8)
@@ -540,11 +478,8 @@ const resolveOllamaNameCollisions = async (newGroups, rules) => {
       if (embeddings[i]) centroidByGroup.set(g, embeddings[i]);
     });
   } catch (e) {
-    // embedBatch/embed already swallow per-tab failures internally and return
-    // null rather than throwing, so this is defense-in-depth for an
-    // unexpected synchronous failure — either way, an empty centroidByGroup
-    // means every lookup below returns null, which decideCollisionAction
-    // already treats as "always disambiguate" (the safe default).
+    // embedBatch already swallows per-tab failures and returns null; this is
+    // defense-in-depth — an empty centroidByGroup falls back to "disambiguate" (the safe default).
     console.warn(`${LOG} Ollama: embedding attempt for name-collision dedupe failed — disambiguating without embeddings:`, e);
   }
 
@@ -556,10 +491,8 @@ const resolveOllamaNameCollisions = async (newGroups, rules) => {
 };
 
 // ─── Merge pass ──────────────────────────────────────────────────────────────
-// Asks the model to consolidate the newGroups it just proposed into fewer,
-// broader categories. Schema is a flat { "Original Name": "Target Name" }
-// map — nested arrays-of-objects consistently produced bad JSON in testing.
-// Falls back to the input newGroups on any error (logged, no throw).
+// Flat { "Original Name": "Target Name" } schema — nested arrays-of-objects
+// consistently produced bad JSON from the model. Falls back to input newGroups on any error.
 
 const mergeNewCategoriesPass = async (newGroups, host, model) => {
   if (!newGroups || newGroups.length < 2) return newGroups;
@@ -580,9 +513,6 @@ const mergeNewCategoriesPass = async (newGroups, host, model) => {
   console.log(`${LOG} Ollama merge-pass took ${Math.round(performance.now() - t0)}ms`);
   console.debug(`${LOG} Ollama merge-pass raw response:`, parsed);
 
-  // Schema: { "Original Name": "Target Name", ... } — for each original, the
-  // model picks a target. Originals sharing a target get merged into one
-  // final group whose name is that target.
   const origByLower = new Map(newGroups.map((g) => [g.name.toLowerCase(), g]));
   const consumed = new Set();
   const byTarget = new Map();
@@ -605,9 +535,7 @@ const mergeNewCategoriesPass = async (newGroups, host, model) => {
 
   const merged = [...byTarget.values()];
 
-  // Defensive: any original category the model omitted from the merge plan
-  // gets kept as-is. The model isn't allowed to silently drop tabs just
-  // because it forgot to mention them.
+  // Defensive: any category the model omitted from the merge plan is kept as-is.
   for (const g of newGroups) {
     if (!consumed.has(g.name.toLowerCase())) {
       console.log(`${LOG} Ollama merge-pass omitted "${g.name}" — keeping unchanged`);
@@ -620,9 +548,7 @@ const mergeNewCategoriesPass = async (newGroups, host, model) => {
 // ─── Pass 2 drivers (public API for click-handler) ───────────────────────────
 
 /**
- * Pass 2 driver for the Ollama engine. Same return shape as runPass2 in
- * ai.mjs so applyPass2() can consume the result unchanged.
- *
+ * Same return shape as runPass2 in ai.mjs so applyPass2() can consume it unchanged.
  * @returns Promise<{ assignedToExisting, newGroups, skipped, failed? }>
  */
 export const runPass2Ollama = async (unmatched, rules) => {
@@ -641,10 +567,8 @@ export const runPass2Ollama = async (unmatched, rules) => {
 };
 
 /**
- * Phase 4c — "Fresh Rebuild" mode. Considers ALL eligible tabs (matched
- * and unmatched) and proposes a complete re-grouping from scratch, ignoring
- * the existing rule names entirely. `assignedToExisting` is always empty.
- *
+ * "Fresh Rebuild" mode — considers ALL eligible tabs and re-groups from
+ * scratch, ignoring existing rules. `assignedToExisting` is always empty.
  * @returns Promise<{ assignedToExisting, newGroups, skipped, failed? }>
  */
 export const runPass2OllamaFresh = async (allTabs) => {
@@ -655,8 +579,7 @@ export const runPass2OllamaFresh = async (allTabs) => {
   const model = getOllamaModel();
 
   try {
-    // Dedup duplicate tabs (same hostname + title) — same reasoning as the
-    // unified path. Avoids inconsistent answers across copies of the same tab.
+    // Dedup duplicate tabs (same hostname + title) — avoids inconsistent answers across copies of the same tab.
     const dedupKey = (t) => `${t.hostname || ""}\x00${t.title || ""}`;
     const dedupIndexByKey = new Map();
     const deduped = [];
@@ -713,9 +636,8 @@ export const runPass2OllamaFresh = async (allTabs) => {
       newGroupsByKey.get(lower).tabs.push(allTabs[i]);
     }
 
-    // Run the merge pass to consolidate over-specialized categories. No
-    // post-filter — we trust whatever survives. See unifiedClassifyOllama
-    // for the rationale (singletons honor model intent rather than discard it).
+    // Merge pass to consolidate over-specialized categories; singletons are
+    // kept as the model's intent, not discarded.
     let newGroups = [...newGroupsByKey.values()];
     if (newGroups.length >= 2) {
       try {
@@ -724,12 +646,7 @@ export const runPass2OllamaFresh = async (allTabs) => {
         console.warn(`${LOG} Ollama merge-pass errored — keeping un-merged groups:`, e);
       }
     }
-    // 3rd phase — content-aware name-collision dedupe (catches what the LLM
-    // merge missed; see resolveOllamaNameCollisions above). No `rules` arg
-    // here — Fresh Rebuild ignores rules by design (runPass2OllamaFresh has
-    // no rules parameter at all), so there's nothing to seed existingNames
-    // with; matches ai.mjs's runPass2Fresh, which has the same omission for
-    // the same reason.
+    // No `rules` arg — Fresh Rebuild ignores rules by design, so there's nothing to seed existingNames with.
     newGroups = await resolveOllamaNameCollisions(newGroups);
     return { assignedToExisting: [], newGroups, skipped };
   } catch (e) {

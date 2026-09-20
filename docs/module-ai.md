@@ -77,7 +77,7 @@ unmatched tabs (from runPass1)
 | `AI_EXISTING_GROUP_BOOST` | 0.10 | added to existing-group sim. Historical — kept for parity with Tidy Tabs's tuning |
 | `AI_EMBEDDING_BATCH_SIZE` | 5 | tabs per parallel embedding batch (memory vs latency) |
 | `TIDY_LOW` | 0.45 | raw cosine bar for TIDY_FUSION's greedy leftover-clustering. Deliberately looser than the existing-group bar's effective ~0.55 raw — these tabs already failed that strict bar, so this is a lower bar for "loosely on the same topic" rather than "slam dunk" |
-| `NAME_COLLISION_MERGE_THRESHOLD` | 0.40 | shared with Fresh and Ollama (`modules/dedupe.mjs`) — cosine bar for merging two same/similar-named new groups vs. renaming one. See [module-dedupe.md](module-dedupe.md) |
+| `NAME_COLLISION_MERGE_THRESHOLD` | 0.30 | shared with Fresh and Ollama (`modules/dedupe.mjs`) — cosine bar for merging two same/similar-named new groups vs. renaming one. See [module-dedupe.md](module-dedupe.md) |
 
 **Why max-over-tabs instead of a centroid?** Averaging a group's tab embeddings into one centroid dilutes specific-tab signals — e.g. an unmatched `amazon.com` tab is similar to an existing `staples.com` tab (shared retail vocabulary), but that signal vanishes when staples is averaged with non-retail tabs in the same group. Scoring against the MAX similarity to any single tab in the group preserves it. (TIDY_FUSION's own clustering and its dedupe-pass centroids DO use averaging/centroids — that tension is deliberate: existing-group matching wants to catch a specific-tab signal, while clustering leftovers into a NEW group is inherently "what do these tabs have in common", which a centroid answers better.)
 

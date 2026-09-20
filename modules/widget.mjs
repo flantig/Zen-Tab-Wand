@@ -1,7 +1,5 @@
-// Zen Tab Wand — settings rules editor widget.
-// Builds the pill table (Category | Matches) with +/- buttons, color/icon controls per row,
-// hex input, and live persistence to the rules pref. Also wires a pref observer so
-// external changes (right-click "Add to Rule…" submenu, AI Pass 2, Import) refresh the table in real time.
+// Zen Tab Wand — rules editor widget. Watches the rules pref so external
+// changes (right-click menu, AI grow, Import) refresh the table live.
 
 import { CONFIG, LOG, h } from "./config.mjs";
 import {
@@ -51,10 +49,8 @@ export const buildRulesEditor = (rules) => {
     syncLiveGroupAppearances(rules);
   };
 
-  // Forward-declared because some helpers (e.g. renderPill's remove button) need
-  // to call render() to redraw the whole table after a mutation. They're defined
-  // BEFORE render() in source order, so without this hoisted `let` they couldn't
-  // see it. Assigned in the `render = () => { ... }` block further down.
+  // Hoisted: helpers defined above render() (e.g. renderPill's remove button)
+  // still need to call it after mutating.
   let render;
 
   const ensureRuleLists = (rule) => {
@@ -69,9 +65,7 @@ export const buildRulesEditor = (rules) => {
     const value = rule[key][idx];
     pill.className = `zao-pill ${isTitle ? "zao-title-pill" : "zao-domain-pill"}`;
 
-    // Free drag-and-drop reordering: the pill body itself is the drag
-    // handle (no separate grip glyph). Tagged by (type, value) rather than
-    // idx since render() rebuilds the DOM on every mutation.
+    // Tagged by (type, value), not idx — render() rebuilds the DOM on every mutation.
     pill.setAttribute("draggable", "true");
     pill.dataset.zaoType = type;
     pill.dataset.zaoValue = value;
@@ -82,8 +76,6 @@ export const buildRulesEditor = (rules) => {
       pillDragType = type;
       pillDragValue = value;
       pill.classList.add("zao-pill-dragging");
-      // No custom setDragImage needed (unlike the row grip) — the pill
-      // itself is what's dragged, so the browser's default image is correct.
     });
     pill.addEventListener("dragend", () => {
       pill.classList.remove("zao-pill-dragging");
@@ -107,14 +99,9 @@ export const buildRulesEditor = (rules) => {
     remove.textContent = "×";
     remove.title = isTitle ? "Remove this title match" : "Remove this domain";
     remove.setAttribute("aria-label", remove.title);
-    // The remove button must be excluded from the pill's own drag — but
-    // checking e.target.closest(".zao-pill-remove") inside the pill's
-    // dragstart handler doesn't work: by the time dragstart fires, e.target
-    // already IS the pill (an ancestor of the button), so .closest() can't
-    // detect the button was the original press point. draggable="false" on
-    // the button itself stops the browser's draggable-ancestor resolution
-    // before it ever reaches the pill. The mousedown stopPropagation is
-    // cheap defense-in-depth, not the primary mechanism.
+    // By the time dragstart fires, e.target already IS the pill, so
+    // e.target.closest() can't tell the button was the press point;
+    // draggable="false" here stops drag resolution before it reaches the pill.
     remove.setAttribute("draggable", "false");
     remove.addEventListener("mousedown", (e) => e.stopPropagation());
     remove.addEventListener("click", () => {
@@ -150,22 +137,15 @@ export const buildRulesEditor = (rules) => {
         if (done) return;
         done = true;
         const val = input.value.trim();
-        // Reject a duplicate exactly like the AI-driven rule-growing paths do
-        // (addDomainToRule/addTitleTermsToRule in ai.mjs) — case-sensitive
-        // for domains, case-insensitive for title terms. Without this, two
-        // pills could end up with the identical (type, value) pair, which
-        // the pill-drag code below identifies by (type, value): two such
-        // pills would then be indistinguishable to it, and hovering one to
-        // drop near the other would look like "dropping on itself" (no-op)
-        // instead of reordering them relative to each other.
+        // Duplicate (type, value) pairs would be indistinguishable to the
+        // pill-drag code below, which identifies pills that way.
         const isDuplicate = val && (isTitle
           ? (rule.titleTerms || []).some((t) => t.toLocaleLowerCase() === val.toLocaleLowerCase())
           : (rule.domains || []).includes(val));
         if (val && !isDuplicate) {
           ensureRuleLists(rule);
           rule[key].push(val);
-          // Sync only an ALREADY-existing matchOrder (lazily created — a
-          // rule that never had a pill dragged never gets one written).
+          // matchOrder is lazily created — only synced if already present.
           if (Array.isArray(rule.matchOrder)) {
             rule.matchOrder.push({ type: isTitle ? "title" : "domain", value: val });
           }
@@ -195,8 +175,7 @@ export const buildRulesEditor = (rules) => {
     const cell = h("div");
     cell.className = "zao-color-cell";
 
-    // Use <div role="button"> — a real <button> picks up chrome-button theming
-    // that fights our 22×22 circle sizing.
+    // <div role="button">, not <button> — a real button's chrome theming fights the circle sizing.
     const swatch = h("div");
     swatch.className = "zao-swatch";
     swatch.setAttribute("role", "button");
@@ -224,16 +203,10 @@ export const buildRulesEditor = (rules) => {
     return cell;
   };
 
-  // Drag-and-drop reorder. Pass 1 is first-match-wins, so the rules array
-  // order determines which group a domain lands in when multiple rules could
-  // claim it. Reordering here changes that priority AND the sidebar's group
-  // display order on next wand click.
-  //
-  // Drag state lives at the editor scope so all rows share it. The DOM
-  // indicator and the actual reorder target both read from `dragToIdx`, so
-  // what the user SEES is exactly what gets applied on drop — no recompute
-  // from clientY at drop-time (which would disagree if the cursor jittered
-  // in the moment between the final dragover and the mouseup).
+  // Rules array order is match priority (Pass 1 is first-match-wins), so
+  // reordering here changes which rule claims an ambiguous domain.
+  // `dragToIdx` is the single source of truth for both the drop indicator
+  // and the actual move, so what's shown is exactly what gets applied.
   let dragFromIdx = null;
   let dragToIdx = null;
 
@@ -245,23 +218,16 @@ export const buildRulesEditor = (rules) => {
   const reorderRules = (fromIdx, toIdx) => {
     if (fromIdx === toIdx || fromIdx === toIdx - 1) return; // no-op moves
     const [moved] = rules.splice(fromIdx, 1);
-    // Adjust toIdx down by one if we removed an item earlier in the list.
+    // Splicing out an earlier item shifts every later index down by one.
     const adjustedTo = fromIdx < toIdx ? toIdx - 1 : toIdx;
     rules.splice(adjustedTo, 0, moved);
     persist();
     render();
   };
 
-  // Free pill drag-and-drop reordering within one rule's Matches cell. Same
-  // container-level-listener pattern as the row reorder above, but pill-
-  // scoped: no grip glyph (the pill body itself is the drag handle), full
-  // free interleaving of domain and title-term pills (not two separately-
-  // ordered sublists), confined to the dragged pill's own rule.
-  //
-  // Editor-scope state, alongside dragFromIdx/dragToIdx above. Identifies
-  // pills by (rule, type, value) rather than DOM index, since `render()`
-  // fully rebuilds the DOM on every mutation — a stale index would be wrong
-  // the instant anything else changes.
+  // Pill reorder within a rule's Matches cell, same container-listener
+  // pattern as the row reorder above. Identifies pills by (rule, type, value)
+  // rather than DOM index since render() rebuilds the DOM on every mutation.
   let pillDragRule = null;
   let pillDragType = null;   // "domain" | "title"
   let pillDragValue = null;
@@ -283,11 +249,8 @@ export const buildRulesEditor = (rules) => {
     pillDropPos = null;
   };
 
-  // Reorders within the rule's FULL free-interleaved match order (not just
-  // within one type's sublist), then writes it back as the new matchOrder —
-  // this is the one place that ever sets `rule.matchOrder` unconditionally,
-  // per the "lazily created" design (a rule that never had a pill dragged
-  // never gets ordering metadata written to it at all).
+  // The only place that unconditionally sets `rule.matchOrder` — it stays
+  // absent until the first pill drag.
   const reorderPill = (rule, srcType, srcValue, targetType, targetValue, pos) => {
     const order = getOrderedMatches(rule);
     const srcIdx = order.findIndex((entry) => entry.type === srcType && entry.value === srcValue);
@@ -309,9 +272,7 @@ export const buildRulesEditor = (rules) => {
     row.className = "zao-row";
     row.dataset.zaoIdx = String(idx);
 
-    // Drag-handle grip. Only this element is `draggable`, so the user must
-    // grab it explicitly — accidental drags from the name/domain inputs are
-    // impossible. Visual: a six-dot "⋮⋮" glyph.
+    // Only the grip is draggable, so drags can't start from the name/domain inputs.
     const grip = h("div", { class: "zao-row-grip", text: "⋮⋮" });
     grip.title = "Drag to reorder";
     grip.setAttribute("draggable", "true");
@@ -320,8 +281,7 @@ export const buildRulesEditor = (rules) => {
       e.dataTransfer.setData("text/zao-rule-idx", String(idx));
       dragFromIdx = idx;
       dragToIdx = null;
-      // Drag the whole row visually (DataTransfer.setDragImage uses an
-      // element + offset). The grip alone would look strange detached.
+      // Use the whole row as the drag image — the grip alone would look detached.
       try { e.dataTransfer.setDragImage(row, 12, row.offsetHeight / 2); } catch {}
       row.classList.add("zao-row-dragging");
     });
@@ -348,16 +308,10 @@ export const buildRulesEditor = (rules) => {
 
     const domainsEl = h("div");
     domainsEl.className = "zao-domains";
-    // Tagged with the rule object (not a string id) so the pill-drag
-    // dragover/drop listeners below can reject any drop target outside this
-    // rule's own Matches container by simple reference equality.
+    // Tagged with the rule object so pill-drag listeners can reject drops outside this rule by reference equality.
     domainsEl._zaoRule = rule;
     ensureRuleLists(rule);
-    // One loop over the free-interleaved match order (domains and title
-    // terms mixed, per any existing drag-reorder) instead of two separate
-    // domains-then-titleTerms passes. Consumed-index tracking (not plain
-    // indexOf) so a duplicate raw string value doesn't collapse two pills
-    // onto the same index.
+    // Consumed-index tracking (not indexOf) so duplicate string values don't collapse two pills onto the same index.
     const usedDomainIdx = new Set();
     const usedTitleIdx = new Set();
     for (const { type, value } of getOrderedMatches(rule)) {
@@ -387,11 +341,8 @@ export const buildRulesEditor = (rules) => {
     return row;
   };
 
-  // Container-level dragover/drop. Some browsers don't fire dragover on the
-  // source element during a drag, so per-row listeners miss events when the
-  // cursor is still over the row being dragged. Listening at the container
-  // covers all rows uniformly — we hit-test the cursor's clientY against
-  // each row's bounding rect to figure out where the drop would land.
+  // Listened at the container, not per-row: some browsers don't fire
+  // dragover on the source element during its own drag.
   if (!container._zaoContainerDragListenersInstalled) {
     container._zaoContainerDragListenersInstalled = true;
     container.addEventListener("dragover", (e) => {
@@ -400,9 +351,6 @@ export const buildRulesEditor = (rules) => {
       e.dataTransfer.dropEffect = "move";
       const rows = Array.from(container.querySelectorAll(".zao-row"));
       if (rows.length === 0) return;
-      // Find the row whose vertical range contains the cursor. If the cursor
-      // is above the first row, target index 0 / top half. If below the last
-      // row, target the last row's bottom half.
       let targetRow = null;
       let targetIdx = -1;
       let above = true;
@@ -449,12 +397,9 @@ export const buildRulesEditor = (rules) => {
     });
   }
 
-  // Container-level dragover/drop for pill reordering — same singleton-
-  // install pattern as the row-reorder listeners above, but a SEPARATE flag
-  // and a separate MIME type ("text/zao-pill") so the two drag features
-  // never interfere with each other on the same container. Not per-
-  // domainsEl listeners: render() fully rebuilds every domainsEl on every
-  // mutation, and per-element listeners would need re-attaching every time.
+  // Separate flag + MIME type ("text/zao-pill") from the row listeners above,
+  // so the two drag features don't interfere. Container-level, not per-
+  // domainsEl, since render() rebuilds every domainsEl on each mutation.
   if (!container._zaoContainerPillDragListenersInstalled) {
     container._zaoContainerPillDragListenersInstalled = true;
     container.addEventListener("dragover", (e) => {
@@ -463,9 +408,7 @@ export const buildRulesEditor = (rules) => {
       e.dataTransfer.dropEffect = "move";
 
       const domainsEl = e.target.closest(".zao-domains");
-      // Reject any drop target outside the dragged pill's own rule — a
-      // domainsEl not tagged with the SAME rule reference (including no
-      // domainsEl at all, or a domainsEl belonging to a different row).
+      // Reject drop targets outside the dragged pill's own rule.
       if (!domainsEl || domainsEl._zaoRule !== pillDragRule) {
         clearPillDropIndicators();
         pillDropType = pillDropValue = pillDropPos = null;
@@ -475,12 +418,8 @@ export const buildRulesEditor = (rules) => {
       const pills = Array.from(domainsEl.querySelectorAll(".zao-pill"));
       if (pills.length === 0) return;
 
-      // Pills wrap across multiple visual lines (flex-wrap), so a pure
-      // vertical comparison (like the row-level code above) doesn't work —
-      // a pill on the next line could be directly below the cursor despite
-      // being far away in reading order. Nearest-pill-by-2D-distance from
-      // cursor to pill-center naturally handles wrapping instead, since a
-      // pill on the next line is simply farther away.
+      // Pills wrap (flex-wrap), so vertical-only comparison (like the row
+      // code above) fails — nearest-by-2D-distance handles wrapping instead.
       let nearest = null;
       let nearestDist = Infinity;
       for (const pill of pills) {
@@ -499,8 +438,7 @@ export const buildRulesEditor = (rules) => {
 
       const targetType = nearest.pill.dataset.zaoType;
       const targetValue = nearest.pill.dataset.zaoValue;
-      // Hovering the dragged pill itself — no sensible before/after relative
-      // to its own position, so show no indicator rather than a confusing one.
+      // Hovering the dragged pill itself has no sensible before/after — show nothing.
       if (targetType === pillDragType && targetValue === pillDragValue) {
         clearPillDropIndicators();
         pillDropType = pillDropValue = pillDropPos = null;
@@ -576,12 +514,8 @@ export const buildRulesEditor = (rules) => {
     container.appendChild(addRow);
   };
 
-  // Refresh widget state from the pref. Called by both the pref observer and
-  // the dialog-open watcher to pick up external changes (e.g. via the tab
-  // right-click submenu, AI Pass 2 grow, or Backup Import). Passes
-  // `keepIncomplete: true` so a blank row the user just added (and which
-  // persists to disk as `{name:"", domains:[]}`) survives the round-trip
-  // and continues to appear in the editor across browser restarts.
+  // keepIncomplete: true so a blank row the user just added survives the
+  // read-back round-trip instead of vanishing from the editor.
   const refreshFromPref = (reason) => {
     if (!container.isConnected) return;
     const fresh = readRulesPref({ keepIncomplete: true });
@@ -593,12 +527,9 @@ export const buildRulesEditor = (rules) => {
     render();
   };
 
-  // Expose the refresh hook on the container as an expando. `prefs-ui.mjs` calls
-  // this when the dialog reopens or its `[open]` attribute changes, to pick up
-  // any pref edits that happened while the dialog was closed.
+  // Expando: prefs-ui.mjs calls this when the dialog reopens to pick up edits made while it was closed.
   container._zaoRefresh = refreshFromPref;
 
-  // Watch for external changes to the rules pref.
   if (rulesPrefObserver) {
     try { Services.prefs.removeObserver(CONFIG.RULES_PREF, rulesPrefObserver); } catch {}
     rulesPrefObserver = null;
@@ -625,14 +556,8 @@ export const buildRulesEditor = (rules) => {
   return container;
 };
 
-// Standalone Backup & Restore section, injected by prefs-ui.mjs as a sibling
-// after the rules editor (not part of the editor card itself). Reads/writes the
-// rules pref directly so any open editor refreshes via its own pref observer.
-// ──────────────────────────────────────────────────────────────────────────────
-// Skip-domains editor — simple pill list. Hostnames in this list never get
-// touched by the tidy click; they're ejected from any group and parked at the
-// top of the workspace before Pass 1 runs (see click-handler.mjs).
-// ──────────────────────────────────────────────────────────────────────────────
+// Skip-domains editor. Hostnames here are excluded from the tidy click and
+// parked at the top of the workspace instead of grouped.
 
 let skipPrefObserver = null;
 
@@ -888,16 +813,8 @@ export const buildCustomIconsEditor = () => {
   return container;
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Backup & Restore — just the Export / Import buttons. The section header and
-// description come from Sine's native separator (declared in preferences.json)
-// and our SECTION_DESCRIPTIONS list (injected by prefs-ui.mjs).
-//
-// Export shape (v1):  { "rules": [...], "skipDomains": [...], "customIcons": [...] }
-// Import accepts:
-//   • that object shape (overwrites whichever prefs are present)
-//   • a bare array (treated as rules-only, for backwards compat with v0 exports)
-// ──────────────────────────────────────────────────────────────────────────────
+// Export shape: { rules, skipDomains, customIcons }. Import also accepts a
+// bare array, treated as rules-only, for backwards compat with v0 exports.
 export const buildBackupRestoreSection = () => {
   const section = h("div", { class: "zao-backup-section" });
   const row = h("div", { class: "zao-action-pref zao-backup-actions-row" });
@@ -908,20 +825,17 @@ export const buildBackupRestoreSection = () => {
   exportBtn.title = "Download current rules, skip domains, and custom icons as a JSON file";
   exportBtn.addEventListener("click", async () => {
     const payload = {
-      // keepIncomplete: true so a user's in-progress rules are included in
-      // the backup — otherwise restoring would silently drop them.
+      // keepIncomplete: true so in-progress rules are included in the backup.
       rules: readRulesPref({ keepIncomplete: true }) || [],
       skipDomains: readSkipDomainsPref() || [],
       customIcons: readCustomIconsPref(),
     };
     const json = JSON.stringify(payload, null, 2);
-    // Filename: wand-backup-<N>groups-YYYYMMDD-HHmmss.json — encodes which
-    // mod produced it, how many rules were saved, and exact-second timestamp.
     const ts = new Date()
       .toISOString()
       .replace(/[-:T]/g, "")
       .replace(/\..*$/, "")
-      .replace(/^(\d{8})(\d{6})$/, "$1-$2"); // 20260519-223045
+      .replace(/^(\d{8})(\d{6})$/, "$1-$2");
     const filename = `wand-backup-${payload.rules.length}groups-${ts}.json`;
 
     const finish = (label) => {
@@ -940,20 +854,16 @@ export const buildBackupRestoreSection = () => {
       }
     };
 
-    // Direct download into the user's default Downloads folder. Uses
-    // Firefox's Downloads API so the saved file also shows up in the browser's
-    // downloads panel (Ctrl+Shift+J) like any other download, with no save
-    // dialog interrupting the flow.
+    // Writes straight to the Downloads folder via Firefox's Downloads API,
+    // so it shows up in the downloads panel with no save dialog.
     try {
       const { Downloads } = ChromeUtils.importESModule(
         "resource://gre/modules/Downloads.sys.mjs"
       );
       const downloadsDir = await Downloads.getPreferredDownloadsDirectory();
       const targetPath = PathUtils.join(downloadsDir, filename);
-      // Write the bytes directly — simpler and more reliable than the
-      // Downloads.createDownload route, which needs a source URI that survives
-      // the async start() call. We then register the completed file with
-      // Firefox's download list so it appears in the downloads panel.
+      // Write bytes directly, then register the already-completed file with
+      // Firefox's download list (simpler than Downloads.createDownload's async start()).
       await IOUtils.writeUTF8(targetPath, json);
       try {
         const list = await Downloads.getList(Downloads.PUBLIC);
@@ -971,8 +881,7 @@ export const buildBackupRestoreSection = () => {
         download.currentBytes = json.length;
         await list.add(download);
       } catch (e) {
-        // Non-fatal — the file is already saved. The downloads panel just
-        // won't have a record. Most users won't notice.
+        // Non-fatal — file is already saved, it just won't appear in the downloads panel.
         console.warn(`${LOG} could not register download with Firefox's download list:`, e);
       }
       console.log(`${LOG} exported ${payload.rules.length} rule(s) + ${payload.skipDomains.length} skip-domain(s) → ${targetPath}`);
@@ -1047,9 +956,7 @@ export const buildBackupRestoreSection = () => {
         }
 
         const current = {
-          // Match the widget's view (includes in-progress rules) so the
-          // "N → M" confirmation reflects what the user actually sees in
-          // the editor, not the filtered wand-click count.
+          // keepIncomplete to match what the editor shows, not the filtered wand-click count.
           rules: (readRulesPref({ keepIncomplete: true }) || []).length,
           skip: (readSkipDomainsPref() || []).length,
           icons: readCustomIconsPref().length,
@@ -1079,11 +986,8 @@ export const buildBackupRestoreSection = () => {
   return section;
 };
 
-// Called from prefs-ui.mjs's teardownSettingsObserver on window unload. The
-// observer is registered against the global Services.prefs, which lives in
-// the parent process and survives window close — without this explicit
-// removal it'd leak one observer + closure (over `container`, `rules`,
-// `window`) per open/close cycle of the settings dialog.
+// Services.prefs lives in the parent process and survives window close, so
+// without this the observer (and its closure) leaks on every dialog reopen.
 export const teardownRulesPrefObserver = () => {
   if (!rulesPrefObserver) return;
   try { Services.prefs.removeObserver(CONFIG.RULES_PREF, rulesPrefObserver); } catch {}

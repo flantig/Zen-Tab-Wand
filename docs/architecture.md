@@ -91,7 +91,7 @@ browser-ui.mjs    browser-hooks.mjs   (browser context)
 prefs-ui.mjs ─── widget.mjs ─── color-picker.mjs / emoji-picker.mjs   (prefs context)
 ```
 
-**Not pictured above** (added for the cross-engine new-group name-collision dedupe — see [module-dedupe.md](module-dedupe.md)): `modules/dedupe.mjs` is a new pure, zero-dependency leaf module, at the same "foundational" level as `config.mjs`. Both `ai.mjs` and `ollama.mjs` import from it (`resolveNameCollisions`, plus the math/naming primitives relocated out of `ai.mjs` and the name-normalization helpers relocated out of `ollama.mjs`). Separately, `ollama.mjs` now also imports `embedBatch` directly from `ai.mjs` — a new cross-import direction between the two engine modules, but not a cycle: `ai.mjs` never imports from `ollama.mjs`. `dedupe.mjs` existing as its own module (rather than one engine importing straight from the other, or duplicating the logic in both) is what keeps that non-cycle possible.
+**Not pictured above**: `modules/dedupe.mjs` (see [module-dedupe.md](module-dedupe.md)) is a pure, zero-dependency leaf module at the same "foundational" level as `config.mjs`. Both `ai.mjs` and `ollama.mjs` import from it; `ollama.mjs` also imports `embedBatch` directly from `ai.mjs` — a cross-import between the two engine modules, but not a cycle, since `ai.mjs` never imports from `ollama.mjs`.
 
 ## The tidy-button click flow
 
