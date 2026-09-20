@@ -164,11 +164,28 @@ export const findNameCollisionBuckets = (groups) => {
   return order;
 };
 
-// Merge-vs-disambiguate arbiter for one colliding pair. Uncertainty must fail
-// toward the non-destructive choice, never toward merging unrelated tabs —
-// so ANY missing/invalid centroid on either side always disambiguates.
-export const decideCollisionAction = (centroidA, centroidB, threshold) => {
-  if (!Array.isArray(centroidA) || !Array.isArray(centroidB)) return "disambiguate";
+// Merge-vs-disambiguate arbiter for one colliding pair.
+//
+// A missing/invalid centroid on either side skips the content check entirely
+// and falls back to `noCentroidAction` — but that fallback means two
+// different things depending on WHY the centroid is missing, and callers
+// must pick the one that actually matches their situation:
+//   - "disambiguate" (the default) — a GENUINE failure: consent was given
+//     and an embedding was attempted but came back missing/invalid. Fail
+//     toward the non-destructive choice, never toward merging unrelated
+//     tabs. This is the only behavior Local/Fresh ever see, and Ollama's own
+//     genuine-embedding-failure path keeps it too — validated correct by
+//     prior bug-bash testing, must not regress.
+//   - "merge" — a DELIBERATE POLICY STATE: no centroid was ever attempted at
+//     all (e.g. Ollama's no-Local-AI-consent path), not a failure. Content
+//     similarity simply isn't available to decide with, so this restores the
+//     historical (pre-dedupe.mjs) behavior of merging unconditionally on a
+//     name collision alone — a real regression fix, since treating "never
+//     attempted" the same as "attempted and failed" silently disabled
+//     Ollama's dedupe for the common no-consent case (see
+//     resolveOllamaNameCollisions in modules/ollama.mjs).
+export const decideCollisionAction = (centroidA, centroidB, threshold, noCentroidAction = "disambiguate") => {
+  if (!Array.isArray(centroidA) || !Array.isArray(centroidB)) return noCentroidAction;
   return cosineSimilarity(centroidA, centroidB) >= threshold ? "merge" : "disambiguate";
 };
 
@@ -273,6 +290,26 @@ export const mergeSimilarClusters = (centroids, threshold) => {
  *   for any comparison involving that group. No embedding calls happen here.
  * @param {number} opts.threshold — cosine-similarity bar for merge vs.
  *   disambiguate (see CONFIG.NAME_COLLISION_MERGE_THRESHOLD).
+ * @param {"disambiguate"|"merge"} [opts.noCentroidAction="disambiguate"] —
+ *   what to do when getCentroid returns null/invalid for either side of a
+ *   comparison. See decideCollisionAction's own doc for the distinction this
+ *   exists to make (genuine embedding failure vs. never-attempted-by-policy).
+ *   Local/Fresh never pass this (stay on the default). Ollama's no-consent
+ *   path passes "merge"; Ollama's genuine-embedding-failure path stays on
+ *   the default too.
+ *
+ *   CALLER CONTRACT for "merge": only pass this when getCentroid returns
+ *   null UNIFORMLY for every group being compared in this call (Ollama's
+ *   no-consent path: no embedding is ever attempted for ANYONE, by policy).
+ *   resolveNameCollisions defends against a MIXED bucket (some real
+ *   centroids, some null) internally — a real centroid encountered mid-
+ *   bucket gets "promoted" into the running comparison sum so later
+ *   candidates are compared against real data instead of cascading through
+ *   a permanently-null anchor — but a caller that intentionally mixes real
+ *   and missing centroids under "merge" is relying on that internal
+ *   defense, not on any guarantee that partial data will be used
+ *   optimally; prefer "disambiguate" (the default) for any caller that has
+ *   SOME real centroids and wants normal content-similarity behavior.
  * @param {string[]} [opts.existingNames] — already-persisted names (e.g. the
  *   caller's current rule names) to seed disambiguation's "already taken"
  *   set with, so a freshly disambiguated name doesn't collide with a name
@@ -294,7 +331,7 @@ export const mergeSimilarClusters = (centroids, threshold) => {
  *   stale after a merge — onto the merged survivor; callers that attach such
  *   fields are expected to strip them from the result themselves.
  */
-export const resolveNameCollisions = (groups, { getCentroid, threshold, existingNames }) => {
+export const resolveNameCollisions = (groups, { getCentroid, threshold, existingNames, noCentroidAction = "disambiguate" }) => {
   const buckets = findNameCollisionBuckets(groups);
 
   // Pass 1 — merge decisions. These are bucket-local (don't depend on any
@@ -352,18 +389,54 @@ export const resolveNameCollisions = (groups, { getCentroid, threshold, existing
     const anchor = { ...bucket[0] };
     const anchorWeight0 = weightOf(bucket[0]);
     const initialCentroid = getCentroid(bucket[0]);
-    // Once null, stays null forever: decideCollisionAction never returns
-    // "merge" when either side is missing/invalid, so nothing ever adds to
-    // an already-null running sum.
+    // With the default noCentroidAction ("disambiguate"), a null anchorSum
+    // stays null forever: decideCollisionAction never returns "merge" when
+    // either side is missing/invalid, so nothing ever adds to an
+    // already-null running sum, and every candidate correctly survives
+    // un-merged (safe default). With noCentroidAction="merge", the INTENDED
+    // caller contract (Ollama's no-consent path) is that getCentroid
+    // returns null for EVERY group in the call — so anchorSum stays null
+    // throughout, and every candidate hits the same no-centroid fallback,
+    // giving the desired "merge unconditionally on name collision alone."
+    //
+    // That contract isn't enforced by the type system, though, and a bucket
+    // that VIOLATES it (anchor has no centroid, but a LATER candidate does)
+    // used to cascade-merge incorrectly: a null anchorSum forces
+    // noCentroidAction="merge" for every subsequent comparison regardless of
+    // whether THAT candidate has real data — so two later candidates with
+    // genuinely different, mutually-orthogonal real centroids could both
+    // silently merge into the null-anchored group without ever being
+    // compared to each other, or to any real content at all. Confirmed by
+    // two independent adversarial reviews with an identical hand-traced
+    // repro (anchor null, two later real-but-orthogonal candidates). Fixed
+    // below by "promoting" the first real centroid encountered mid-bucket
+    // to become the running sum, so anything AFTER that point gets a real
+    // comparison instead of a blind noCentroidAction default. This is a
+    // no-op for the actual, uniform-null Ollama call (no candidate ever has
+    // real data to promote, so anchorSum simply stays null throughout, same
+    // as before) and never affects the default "disambiguate" path either
+    // (a null anchorSum there means every action is "disambiguate", so the
+    // merge branch below — where promotion happens — is never entered).
     let anchorSum = initialCentroid ? scaleVector(initialCentroid, anchorWeight0) : null;
     const survivors = [];
     for (let i = 1; i < bucket.length; i++) {
       const candidate = bucket[i];
       const candidateCentroid = getCentroid(candidate);
-      const action = decideCollisionAction(anchorSum, candidateCentroid, threshold);
+      const action = decideCollisionAction(anchorSum, candidateCentroid, threshold, noCentroidAction);
       if (action === "merge") {
         anchor.tabs = [...anchor.tabs, ...candidate.tabs];
-        anchorSum = addVectors(anchorSum, scaleVector(candidateCentroid, weightOf(candidate)));
+        if (anchorSum && candidateCentroid) {
+          // Normal case: both sides have real data — accumulate as usual.
+          anchorSum = addVectors(anchorSum, scaleVector(candidateCentroid, weightOf(candidate)));
+        } else if (!anchorSum && candidateCentroid) {
+          // Promotion (see note above): the running sum had no real data
+          // yet, but THIS candidate does — start using it, so any LATER
+          // candidate in this bucket gets compared against real content
+          // instead of cascading through another blind noCentroidAction.
+          anchorSum = scaleVector(candidateCentroid, weightOf(candidate));
+        }
+        // else: neither side has real data — nothing to add or promote;
+        // anchorSum stays null (matches the intended uniform-null contract).
       } else {
         survivors.push(candidate);
       }

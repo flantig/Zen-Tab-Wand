@@ -116,10 +116,67 @@ export const CONFIG = {
   // Cosine-similarity bar for the shared name-collision merge/disambiguate
   // decision (modules/dedupe.mjs), used by TIDY_FUSION, Fresh's safety net,
   // and Ollama's post-collision check. Distinct from ai.mjs's local
-  // FRESH_MERGE_THRESHOLD (same initial value, 0.40) because it governs a
-  // conceptually different decision — future tuning of one shouldn't
-  // silently move the other.
-  NAME_COLLISION_MERGE_THRESHOLD: 0.40,
+  // FRESH_MERGE_THRESHOLD and this file's TIDY_MERGE_THRESHOLD because it
+  // governs a conceptually different decision — future tuning of one
+  // shouldn't silently move the others.
+  //
+  // MUST stay meaningfully BELOW both FRESH_MERGE_THRESHOLD (0.40) and
+  // TIDY_MERGE_THRESHOLD (0.35), not just "distinct" from them — this check
+  // runs on the SAME centroids the fragmentation-merge pass already ran on,
+  // AFTER that pass, for groups that pass already declined to merge. If this
+  // bar sits at or above that pass's own bar, nothing can ever clear it
+  // (anything that would have cleared an equal-or-lower bar already got
+  // merged by the earlier pass), making the merge branch of
+  // resolveNameCollisions dead code for Local/Fresh. This was a real,
+  // reproduced regression (found by adversarial review) at the previous
+  // value of 0.40: two separate "Google" clusters (mail.google.com vs
+  // docs.google.com) that used to correctly merge via the old exact-name-
+  // match safety net instead produced "Google" and "Google (Google)" — a
+  // redundant, broken name for the exact case this mechanism exists to
+  // catch. Set below TIDY_MERGE_THRESHOLD (the lower of the two upstream
+  // bars) rather than just below FRESH_MERGE_THRESHOLD, so the safety net
+  // stays live for BOTH paths, not just Fresh. A literal name collision is
+  // itself corroborating evidence beyond raw content similarity — two
+  // clusters landing on the same name isn't just "somewhat similar
+  // content", it's "somewhat similar content AND agreement on what to call
+  // it" — so it's correct for that extra signal to tip the balance toward
+  // merging at a looser content-similarity bar than either upstream pass
+  // used alone.
+  //
+  // Verified via the Marionette harness (phase4_name_collision_threshold.py):
+  // the Google/Google scenario now merges correctly at this value and did
+  // NOT merge at the old 0.40 (confirmed both ways, real embeddings,
+  // temporarily reverting the constant for a true before/after). NOTE —
+  // corrected after an earlier draft of this comment overclaimed:
+  // phase3_merge_scenarios.py's same-hostname-unrelated-topics guard
+  // exercises TIDY_MERGE_THRESHOLD / mergeSimilarClusters (a DIFFERENT
+  // upstream pass), not this threshold or resolveNameCollisions at all — it
+  // is NOT evidence for this specific mechanism and citing it here was
+  // wrong (found by adversarial review).
+  //
+  // KNOWN, ACCEPTED-BUT-FLAGGED TRADE-OFF (also found by adversarial
+  // review, using this session's own Marionette test data): at 0.30, two
+  // GENUINELY UNRELATED real groups that happen to land on the same
+  // GENERIC fallback name (e.g. both hit nameClusterFromHostnames' bare
+  // hostname-stitch fallback, or both get a generic single-word intent
+  // label like "Reading") can merge if their real content similarity
+  // clears 0.30 — a band this file's own AI_EXISTING_GROUP_THRESHOLD
+  // comment already describes as "compressed, hard-to-discriminate" even
+  // for genuinely correct picks. Demonstrated concretely: two unrelated
+  // synthetic pages ("Google Drive - My Drive" / "Notion - Getting
+  // Started") both fell through to the same degenerate hostname-stitch
+  // name and merged at a real ~0.31 similarity — see
+  // phase4_name_collision_threshold.py / phase4_fixed3.log. This is a
+  // strictly LOOSER safety net than the old pre-dedupe.mjs behavior it's
+  // restoring parity with for Ollama's no-consent case (merge on name
+  // alone, zero content check), so it's not a new category of risk, but it
+  // is a real, evidenced increase in false-positive surface for Local/
+  // Fresh's own safety net vs. the immediately-prior 0.40 value. Left as-is
+  // pending a product decision on whether to accept this trade-off or add
+  // a secondary signal (e.g. requiring the colliding name to be
+  // non-generic, or a minimum-confidence gate) before merging on name-
+  // collision alone at this similarity band.
+  NAME_COLLISION_MERGE_THRESHOLD: 0.30,
 
   // Local-AI chunking. When the count of unmatched tabs to embed exceeds the
   // chunking threshold, the engine switches to a more conservative pipeline:

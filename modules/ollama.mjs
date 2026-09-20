@@ -491,12 +491,25 @@ const resolveOllamaNameCollisions = async (newGroups, rules) => {
   // ML model as a side effect of a dedupe check would bypass that consent
   // flow. Intentionally stricter than "try, then fall back on failure" —
   // never attempt the embedding at all without consent.
+  //
+  // No consent means no centroid was ever ATTEMPTED — a deliberate policy
+  // state, not a failure — so this must NOT fall back to
+  // decideCollisionAction's default "disambiguate" (that's reserved for a
+  // genuine embedding failure, see the embedBatch try/catch below). The
+  // engine this replaced (dedupeSimilarNewGroups) merged unconditionally on
+  // a normalized-name collision with no centroid at all; without
+  // noCentroidAction: "merge" here, this path silently never merges for the
+  // common no-consent case — a real regression, found and fixed via
+  // adversarial review, reproduced with this module's own motivating
+  // example: "Content Unavailable" + "Content Unavailability" stayed two
+  // groups instead of merging into one.
   if (!isLocalAIAcknowledged()) {
-    console.log(`${LOG} Ollama: name collision detected but Local AI engine not acknowledged — disambiguating without embeddings`);
+    console.log(`${LOG} Ollama: name collision detected but Local AI engine not acknowledged — merging on name match alone (no embeddings attempted)`);
     return resolveNameCollisions(newGroups, {
       getCentroid: () => null,
       threshold: CONFIG.NAME_COLLISION_MERGE_THRESHOLD,
       existingNames,
+      noCentroidAction: "merge",
     });
   }
 
